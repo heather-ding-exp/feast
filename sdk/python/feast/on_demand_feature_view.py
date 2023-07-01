@@ -1,11 +1,13 @@
 import copy
 import functools
 import warnings
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import FunctionType
 from typing import Any, Dict, List, Optional, Type, Union
 
 import dill
+from feast import Entity
+from numpy import DataSource
 import pandas as pd
 from typeguard import typechecked
 
@@ -69,6 +71,14 @@ class OnDemandFeatureView(BaseFeatureView):
     tags: Dict[str, str]
     owner: str
 
+    entities: List[Entity]
+    feature_view_name: str
+    push_source_name: str
+    batch_source: DataSource
+    ttl: Optional[timedelta]
+
+
+
     @log_exceptions  # noqa: C901
     def __init__(  # noqa: C901
         self,
@@ -87,6 +97,13 @@ class OnDemandFeatureView(BaseFeatureView):
         description: str = "",
         tags: Optional[Dict[str, str]] = None,
         owner: str = "",
+
+        entities: List[Entity] = List[None],
+        feature_view_name: str = None,
+        push_source_name: str = None,
+        batch_source: DataSource = None,
+        ttl: Optional[timedelta] = timedelta(days=0)
+
     ):
         """
         Creates an OnDemandFeatureView object.
@@ -128,6 +145,12 @@ class OnDemandFeatureView(BaseFeatureView):
 
         self.udf = udf  # type: ignore
         self.udf_string = udf_string
+
+        self.entities = entities
+        self.feature_view_name = feature_view_name
+        self.push_source_name = push_source_name
+        self.batch_source = batch_source
+        self.ttl = ttl
 
     @property
     def proto_class(self) -> Type[OnDemandFeatureViewProto]:
