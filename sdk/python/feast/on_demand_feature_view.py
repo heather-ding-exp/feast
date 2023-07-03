@@ -445,6 +445,12 @@ def on_demand_feature_view(
     description: str = "",
     tags: Optional[Dict[str, str]] = None,
     owner: str = "",
+
+    entities: List[Entity] = List[None],
+    feature_view_name: str = None,
+    push_source_name: str = None,
+    batch_source: DataSource = None,
+    ttl: Optional[timedelta] = timedelta(days=0)
 ):
     """
     Creates an OnDemandFeatureView object with the given user function as udf.
@@ -479,6 +485,11 @@ def on_demand_feature_view(
             tags=tags,
             owner=owner,
             udf_string=udf_string,
+            entities=entities,
+            feature_view_name=feature_view_name,
+            push_source_name=push_source_name,
+            batch_source=batch_source,
+            ttl=ttl
         )
         functools.update_wrapper(
             wrapper=on_demand_feature_view_obj, wrapped=user_function

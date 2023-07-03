@@ -65,10 +65,10 @@ benchmark-python-local:
 test-python:
 	FEAST_USAGE=False \
 	IS_TEST=True \
-	python -m pytest -n 8 sdk/python/tests \
+	python3 -m pytest -n 8 sdk/python/tests \
 
 test-python-integration:
-	FEAST_USAGE=False IS_TEST=True python -m pytest -n 8 --integration sdk/python/tests
+	FEAST_USAGE=False IS_TEST=True python3 -m pytest -n 8 --integration sdk/python/tests
 
 test-python-integration-local:
 	@(docker info > /dev/null 2>&1 && \
@@ -76,7 +76,7 @@ test-python-integration-local:
 		IS_TEST=True \
 		FEAST_IS_LOCAL_TEST=True \
 		FEAST_LOCAL_ONLINE_CONTAINER=True \
-		python -m pytest -n 8 --integration \
+		python3 -m pytest -n 8 --integration \
 			-k "not gcs_registry and \
  				not s3_registry and \
  				not test_lambda_materialization and \
