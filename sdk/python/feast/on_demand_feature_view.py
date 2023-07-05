@@ -167,6 +167,12 @@ class OnDemandFeatureView(BaseFeatureView):
             description=self.description,
             tags=self.tags,
             owner=self.owner,
+
+            entities = self.entities,
+            feature_view_name = self.feature_view_name,
+            push_source_name = self.push_source_name,
+            batch_source = self.batch_source,
+            ttl = self.ttl,
         )
         fv.projection = copy.copy(self.projection)
         return fv
@@ -186,6 +192,12 @@ class OnDemandFeatureView(BaseFeatureView):
             or self.source_request_sources != other.source_request_sources
             or self.udf_string != other.udf_string
             or self.udf.__code__.co_code != other.udf.__code__.co_code
+
+            or self.entities != other.entities
+            or self.feature_view_name != other.feature_view_name
+            or self.push_source_name != other.push_source_name
+            or self.batch_source != other.batch_source
+            or self.ttl != other.ttl
         ):
             return False
 
