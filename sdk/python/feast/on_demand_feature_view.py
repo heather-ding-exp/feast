@@ -7,13 +7,12 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 import dill
 from feast import Entity
-from numpy import DataSource
 import pandas as pd
 from typeguard import typechecked
 
 from feast.base_feature_view import BaseFeatureView
 from feast.batch_feature_view import BatchFeatureView
-from feast.data_source import RequestSource
+from feast.data_source import RequestSource, DataSource
 from feast.errors import RegistryInferenceFailure, SpecifiedFeaturesNotPresentError
 from feast.feature_view import FeatureView
 from feast.feature_view_projection import FeatureViewProjection
