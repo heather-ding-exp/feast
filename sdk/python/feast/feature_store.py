@@ -881,11 +881,26 @@ class FeatureStore:
             for v in odfv.source_request_sources.values():
                 data_sources_set_to_update.add(v)
 
+            # Register feature view, push source, batch source for persisted odfvs
+            if odfv.persist == True:
+                # Assert feature view name, entities, push source name, batch_source exist
+
+                # Add batch source
+                data_sources_to_update.append(odfv.batch_source)
+                # Create and add push_source
+                push_source = PushSource(name=odfv.push_source_name, batch_source=odfv.batch_source) #TODO: add description, tags,owner
+                data_sources_set_to_update.add(push_source) 
+
+                # Create and add feature view
+                views_to_update.append(FeatureView(name=odfv.feature_view_name, source=push_source, 
+                                                   schema=odfv.features, entities=odfv.entities, ttl=odfv.ttl, online=True)) #TODO: add description, tags,owner
+                
+
         data_sources_to_update = list(data_sources_set_to_update)
 
         # Handle all entityless feature views by using DUMMY_ENTITY as a placeholder entity.
         entities_to_update.append(DUMMY_ENTITY)
-
+            
         # Validate all feature views and make inferences.
         self._validate_all_feature_views(
             views_to_update, odfvs_to_update, request_views_to_update, sfvs_to_update
