@@ -188,13 +188,13 @@ def test_apply_feature_view_integration(test_feature_store):
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "test_feature_store",
+    "test_feature_store_w_persisted_odfvs",
     [
         lazy_fixture("feature_store_with_gcs_registry"),
         lazy_fixture("feature_store_with_s3_registry"),
     ],
 )
-def test_apply_on_demand_feature_view_persistence_integration(test_feature_store):
+def test_apply_on_demand_feature_view_persistence_integration(test_feature_store_w_persisted_odfvs):
     # Create Feature Views
     batch_source = FileSource(
         file_format=ParquetFormat(),
@@ -248,14 +248,14 @@ def test_apply_on_demand_feature_view_persistence_integration(test_feature_store
         batch_source=batch_source,
     )
 
-    # Register Feature View
-    test_feature_store.apply([fv1, entity, odfv1])
+    # Register Feature View, On Demand Feature View
+    test_feature_store_w_persisted_odfvs.apply([fv1, entity, odfv1])
 
-    feature_views = test_feature_store.list_feature_views()
+    feature_views = test_feature_store_w_persisted_odfvs.list_feature_views()
 
     # List Feature Views
     assert (
-        len(feature_views) == 2
+        len(feature_views) == 2 
         and feature_views[1].name == "my_odfv_1_fv"
         and feature_views[1].features[0].name == "odf1_my_feature_1"
         and feature_views[1].features[0].dtype == Int64
@@ -268,7 +268,7 @@ def test_apply_on_demand_feature_view_persistence_integration(test_feature_store
         and feature_views[1].entities[0] == "odf1_my_entity_1"
     )
 
-    feature_view = test_feature_store.get_feature_view("my_odfv_1_fv")
+    feature_view = test_feature_store_w_persisted_odfvs.get_feature_view("my_odfv_1_fv")
     assert (
         feature_view.name == "my_odfv_1_fv"
         and feature_view.features[0].name == "odf1_my_feature_1"
@@ -282,11 +282,12 @@ def test_apply_on_demand_feature_view_persistence_integration(test_feature_store
         and feature_view.entities[0] == "odf1_my_entity_1"
     )
 
-    odfvs = test_feature_store.list_on_demand_feature_views()
+    #List On Demand Feature Views
+    odfvs = test_feature_store_w_persisted_odfvs.list_on_demand_feature_views()
     assert(
         len(odfvs) == 1
     )
-    odfv = test_feature_store.get_on_demand_feature_view("my_odfv_1")
+    odfv = test_feature_store_w_persisted_odfvs.get_on_demand_feature_view("my_odfv_1")
     assert(
         odfv.name == "my_odfv_1"
         and odfv.features[0].name == "odf1_my_feature_1"
@@ -305,26 +306,27 @@ def test_apply_on_demand_feature_view_persistence_integration(test_feature_store
         and odfv.udf == udf1
     )
 
-    data_sources = test_feature_store.list_data_sources()
+    # List Data Sources
+    data_sources = test_feature_store_w_persisted_odfvs.list_data_sources()
     assert(
         len(data_sources) == 1
         and data_sources[0].name == "my_odfv_1_ps"
     )
 
-    push_source = test_feature_store.get_data_source("my_odfv_1_ps")
+    push_source = test_feature_store_w_persisted_odfvs.get_data_source("my_odfv_1_ps")
     assert(
         push_source.name == "my_odfv_1_ps"
         and push_source.batch_source == batch_source
     )
 
 
-    test_feature_store.delete_feature_view("my_feature_view_1")
-    feature_views = test_feature_store.list_feature_views()
+    test_feature_store_w_persisted_odfvs.delete_feature_view("my_feature_view_1")
+    feature_views = test_feature_store_w_persisted_odfvs.list_feature_views()
     assert len(feature_views) == 1
-    test_feature_store.delete_feature_view("my_odfv_1_fv")
+    test_feature_store_w_persisted_odfvs.delete_feature_view("my_odfv_1_fv")
     assert len(feature_views) == 0
 
-    test_feature_store.teardown()
+    test_feature_store_w_persisted_odfvs.teardown()
 
 
 @pytest.fixture
