@@ -13,6 +13,7 @@
 # limitations under the License.
 import copy
 import itertools
+import multiprocessing
 import os
 import warnings
 from collections import Counter, defaultdict
@@ -887,13 +888,15 @@ class FeatureStore:
 
                 # Add batch source
                 data_sources_to_update.append(odfv.batch_source)
-                # Create and add push_source
-                push_source = PushSource(name=odfv.push_source_name, batch_source=odfv.batch_source) #TODO: add description, tags,owner
+                # Create and add push_source #TODO: add description, tags,owner
+                push_source = PushSource(name=odfv.push_source_name, batch_source=odfv.batch_source) 
                 data_sources_set_to_update.add(push_source) 
 
-                # Create and add feature view
-                views_to_update.append(FeatureView(name=odfv.feature_view_name, source=push_source, 
-                                                   schema=odfv.features, entities=odfv.entities, ttl=odfv.ttl, online=True)) #TODO: add description, tags,owner
+                # Create and add feature view #TODO: add description, tags,owner
+                feature_view = FeatureView(name=odfv.feature_view_name, source=push_source, schema=odfv.features, ttl=odfv.ttl, online=True)
+                # This is deliberately set outside of the FV initialization as we do not have the Entity objects.
+                feature_view.entities = odfv.entities
+                views_to_update.append(feature_view) 
                 
 
         data_sources_to_update = list(data_sources_set_to_update)
@@ -966,6 +969,7 @@ class FeatureStore:
             validation_references_to_delete = [
                 ob for ob in objects_to_delete if isinstance(ob, ValidationReference)
             ]
+
 
             for data_source in data_sources_to_delete:
                 self._registry.delete_data_source(
@@ -2228,6 +2232,114 @@ class FeatureStore:
             )
 
         return views_to_use
+    
+    def get_online_features_and_update(self, features_to_fetch: List[str], 
+                                 entity_rows:List[Dict[str, Any]]) -> OnlineResponse:
+        """ Returns on-demand and regular features, updates on-demand features in the online store
+
+        Args:
+        store: The feature store instance from which features are retrieved from
+        features_to_fetch: A list of FeatureView:FeatureName to retrieve
+        entity_rows: A list of entities to fetch features for
+
+        Returns: On-demand Features
+        """
+        features = self.get_online_features(
+                features=features_to_fetch,
+                entity_rows=entity_rows,
+            )
+
+        # Process deals with modifying the returned feature and pushing to online store 
+        process = multiprocessing.Process(target=self.update_on_demand_feature_views(features, features_to_fetch, entity_rows))
+        process.start()
+
+        # Process passes the returned feature to the user
+        return(features)
+
+    def update_on_demand_feature_views(self, features: OnlineResponse, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]):
+        """Pushes on-demand features to the online store
+
+        Args:
+        self: A feast FeatureStore object
+        returned_features: A feast OnlineResponse object that represents the on-demand feature views
+        features_to_fetch: A list of FeatureView:FeatureName retrieved
+        entity_rows: A list of entities to fetch features for
+
+        Returns:
+            None
+        """
+        # Get all on-demand feature views to be updated
+        od_feature_views = self._get_on_demand_feature_views(features_to_fetch=features_to_fetch)
+
+        if not od_feature_views:
+            # If there are no on-demand feature views computed, give the user a warning 
+            warnings.warn("No on-demand feature views for persistence detected, no push executed", UserWarning)
+        else:
+            # Execute all feature view updates in parallel
+            jobs = [(self, features, od_feature_view, entity_rows) for od_feature_view in od_feature_views]
+            pool = multiprocessing.Pool()                                # Grabs available cores
+            results = pool.map(self._update_on_demand_feature_views, jobs)    # Proccess as a core opens up
+            pool.close()
+            pool.join()
+
+        # Check results are all good, else return error message
+        return
+
+     # -------------------------------------
+    def _update_on_demand_feature_views(self, features: OnlineResponse, odfv: OnDemandFeatureView, entity_rows:List[Dict[str, Any]]):
+        # Features dataframe
+        features_df = features.to_df(include_event_timestamps=False)
+
+        # Add neccessary columns, TODO: drop unneccessary columns
+        entity = features_df.columns.values[0]
+        feature_names = {list(features_df.columns.values)[1:]}      # List of features in dataframe
+        schema = [feature.name for feature in odfv.features]    # The features we need in order to push complete feature view
+        features_to_retrive = [feature_name for feature_name in schema if feature_name not in feature_names]
+
+        if len(features_to_retrive) > 0:
+            warnings.warn("Incomplete on-demand feature view calculated, manually retrieving uncalculated features", UserWarning)
+            # TODO: figure out the name of the persisted FV
+            persisted_odfv = ":"
+            features_to_fetch = [persisted_odfv + feature_name for feature_name in features_to_retrive]
+            entity_rows_to_fetch = [{entity: entity_row[entity]} for entity_row in entity_rows]
+            returned_features = self.get_online_features(
+                features=features_to_fetch,
+                entity_rows=entity_rows_to_fetch,
+            ).to_df
+            features_df = pd.merge(features_df, returned_features, on=entity)
+                
+                
+        # Add timestamp columns
+        features_df["event_timestamp"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
+        features_df["created"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
+
+        # Push
+        push_source = None      # TODO: figure out how to get the push source from on_demand_feature_view definition
+        self.push(push_source, features_df, to=PushMode.ONLINE)
+        return
+
+    def _get_on_demand_feature_views(self, features_to_fetch: List[str]) -> List[OnDemandFeatureView]:
+        """Get the on-demand feature views involved in a fetch
+
+        Args:
+        self: The feature store instance from which features are retrieved from
+        features_to_fetch: A list of FeatureView:FeatureName to retrieve
+
+        Returns: A list of on-demand feature view objects from which features were fetched from 
+        """
+
+        # Get on-demand and regular feature views involved in this call, each feature has form FeatureView:FeatureName
+        feature_view_strs = {feature.split(':', 1)[0] for feature in features_to_fetch}
+
+        # Get all on-demand feature views defined in the registry
+        all_od_feature_views = {od_feature_view.name:od_feature_view for od_feature_view in self.list_on_demand_feature_views()}
+
+        od_feature_views = []
+        for feature_view_str in feature_view_strs:
+            if feature_view_str in all_od_feature_views.keys():
+                od_feature_views.append(all_od_feature_views[feature_view_str])
+        
+        return od_feature_views
 
     @log_exceptions_and_usage
     def serve(
