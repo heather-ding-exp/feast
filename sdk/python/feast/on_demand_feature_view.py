@@ -66,6 +66,16 @@ class OnDemandFeatureView(BaseFeatureView):
         tags: A dictionary of key-value pairs to store arbitrary metadata.
         owner: The owner of the on demand feature view, typically the email of the primary
             maintainer.
+
+        persist: Flag whether or not this on-demand feature view is persisted in the online store
+        entities: The list of names of entities that this feature view is associated with.
+        feature_view_name: The feature view name under which the on-demand feature view is persisted in the online store
+        push_source_name: The name of the push source to update the persisted feature view manually
+        batch_source: The batch source of data where this group of on-demand features is stored.
+                      This is needed to initialize values in the online store. 
+        ttl: The amount of time this group of features lives. A ttl of 0 indicates that
+            this group of features lives forever. Note that large ttl's or a ttl of 0
+            can result in extremely computationally intensive queries.
     """
 
     name: str
@@ -78,6 +88,7 @@ class OnDemandFeatureView(BaseFeatureView):
     tags: Dict[str, str]
     owner: str
 
+    persist: bool 
     entities: List[str]
     feature_view_name: str
     push_source_name: str
@@ -105,6 +116,7 @@ class OnDemandFeatureView(BaseFeatureView):
         tags: Optional[Dict[str, str]] = None,
         owner: str = "",
 
+        persist: bool = False, 
         entities: List[Entity] = None,
         feature_view_name: str = None,
         push_source_name: str = None,
@@ -129,6 +141,18 @@ class OnDemandFeatureView(BaseFeatureView):
             tags (optional): A dictionary of key-value pairs to store arbitrary metadata.
             owner (optional): The owner of the on demand feature view, typically the email
                 of the primary maintainer.
+                
+            persist(optional): Flag whether or not this on-demand feature view is persisted in the online store. If this flag is true, 
+            the following fields must have values. 
+            entities(optional): The list of names of entities that this feature view is associated with.
+            feature_view_name(optional): The feature view name under which the on-demand feature view is persisted in the online store
+            push_source_name(optional): The name of the push source to update the persisted feature view manually
+            batch_source(optional): The batch source of data where this group of on-demand features is stored.
+                        This is needed to initialize values in the online store. 
+
+            ttl(optional): The amount of time this group of persisted features lives. A ttl of 0 indicates that
+                this group of features lives forever. Note that large ttl's or a ttl of 0
+                can result in extremely computationally intensive queries.
         """
         super().__init__(
             name=name,
@@ -153,6 +177,7 @@ class OnDemandFeatureView(BaseFeatureView):
         self.udf = udf  # type: ignore
         self.udf_string = udf_string
 
+        self.persist = persist
         self.entities = [e.name for e in entities] if entities else [DUMMY_ENTITY_NAME]
         self.feature_view_name = feature_view_name
         self.push_source_name = push_source_name
@@ -175,7 +200,7 @@ class OnDemandFeatureView(BaseFeatureView):
             tags=self.tags,
             owner=self.owner,
 
-    
+            persist = self.persist, 
             feature_view_name = self.feature_view_name,
             push_source_name = self.push_source_name,
             batch_source = self.batch_source,
@@ -202,7 +227,8 @@ class OnDemandFeatureView(BaseFeatureView):
             or self.source_request_sources != other.source_request_sources
             or self.udf_string != other.udf_string
             or self.udf.__code__.co_code != other.udf.__code__.co_code
-
+            
+            or self.persist != other.persist
             or self.entities != other.entities
             or self.feature_view_name != other.feature_view_name
             or self.push_source_name != other.push_source_name
@@ -468,6 +494,7 @@ def on_demand_feature_view(
     tags: Optional[Dict[str, str]] = None,
     owner: str = "",
 
+    persist: bool = False, 
     entities: List[Entity] = None,
     feature_view_name: str = None,
     push_source_name: str = None,
@@ -487,6 +514,18 @@ def on_demand_feature_view(
         tags (optional): A dictionary of key-value pairs to store arbitrary metadata.
         owner (optional): The owner of the on demand feature view, typically the email
             of the primary maintainer.
+
+        persist(optional): Flag whether or not this on-demand feature view is persisted in the online store. If this flag is true, 
+            the following fields must have values. 
+        entities(optional): The list of names of entities that this feature view is associated with.
+        feature_view_name(optional): The feature view name under which the on-demand feature view is persisted in the online store
+        push_source_name(optional): The name of the push source to update the persisted feature view manually
+        batch_source(optional): The batch source of data where this group of on-demand features is stored.
+                      This is needed to initialize values in the online store. 
+
+        ttl(optional): The amount of time this group of persisted features lives. A ttl of 0 indicates that
+            this group of features lives forever. Note that large ttl's or a ttl of 0
+            can result in extremely computationally intensive queries.
     """
 
     def mainify(obj):
@@ -507,6 +546,7 @@ def on_demand_feature_view(
             tags=tags,
             owner=owner,
             udf_string=udf_string,
+            persist=persist,
             entities=entities,
             feature_view_name=feature_view_name,
             push_source_name=push_source_name,
