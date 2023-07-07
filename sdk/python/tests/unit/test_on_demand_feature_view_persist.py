@@ -102,4 +102,4 @@ def test_hash():
     assert len(s2) == 2
 
     s3 = {on_demand_feature_view_1, on_demand_feature_view_3}
-    assert len(s1) == 1
+    assert len(s3) == 1
