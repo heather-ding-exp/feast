@@ -78,7 +78,7 @@ babel==2.12.1
     # via sphinx
 backcall==0.2.0
     # via ipython
-backports-zoneinfo==0.2.1
+backports-zoneinfo==0.2.1;python_version<"3.9"
     # via
     #   trino
     #   tzlocal
@@ -103,7 +103,7 @@ build==0.10.0
     # via
     #   feast (setup.py)
     #   pip-tools
-bytewax==0.15.1
+bytewax==0.16.1
     # via feast (setup.py)
 cachecontrol==0.13.0
     # via firebase-admin

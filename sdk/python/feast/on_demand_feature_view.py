@@ -38,6 +38,13 @@ from feast.value_type import ValueType
 
 warnings.simplefilter("once", DeprecationWarning)
 
+DUMMY_ENTITY_ID = "__dummy_id"
+DUMMY_ENTITY_NAME = "__dummy"
+DUMMY_ENTITY_VAL = ""
+DUMMY_ENTITY = Entity(
+    name=DUMMY_ENTITY_NAME,
+    join_keys=[DUMMY_ENTITY_ID],
+)
 
 @typechecked
 class OnDemandFeatureView(BaseFeatureView):
@@ -71,7 +78,7 @@ class OnDemandFeatureView(BaseFeatureView):
     tags: Dict[str, str]
     owner: str
 
-    entities: List[Entity]
+    entities: List[str]
     feature_view_name: str
     push_source_name: str
     batch_source: DataSource
@@ -146,7 +153,7 @@ class OnDemandFeatureView(BaseFeatureView):
         self.udf = udf  # type: ignore
         self.udf_string = udf_string
 
-        self.entities = entities
+        self.entities = self.entities = [e.name for e in entities] if entities else [DUMMY_ENTITY_NAME]
         self.feature_view_name = feature_view_name
         self.push_source_name = push_source_name
         self.batch_source = batch_source
