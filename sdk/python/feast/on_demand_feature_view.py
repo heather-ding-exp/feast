@@ -105,7 +105,7 @@ class OnDemandFeatureView(BaseFeatureView):
         tags: Optional[Dict[str, str]] = None,
         owner: str = "",
 
-        entities: List[Entity] = List[None],
+        entities: List[Entity] = None,
         feature_view_name: str = None,
         push_source_name: str = None,
         batch_source: DataSource = None,
@@ -153,7 +153,7 @@ class OnDemandFeatureView(BaseFeatureView):
         self.udf = udf  # type: ignore
         self.udf_string = udf_string
 
-        self.entities = self.entities = [e.name for e in entities] if entities else [DUMMY_ENTITY_NAME]
+        self.entities = [e.name for e in entities] if entities else [DUMMY_ENTITY_NAME]
         self.feature_view_name = feature_view_name
         self.push_source_name = push_source_name
         self.batch_source = batch_source
@@ -166,7 +166,7 @@ class OnDemandFeatureView(BaseFeatureView):
     def __copy__(self):
         fv = OnDemandFeatureView(
             name=self.name,
-            schema=self.features,
+            schema=copy.copy(self.features),
             sources=list(self.source_feature_view_projections.values())
             + list(self.source_request_sources.values()),
             udf=self.udf,
@@ -175,12 +175,15 @@ class OnDemandFeatureView(BaseFeatureView):
             tags=self.tags,
             owner=self.owner,
 
-            entities = self.entities,
+    
             feature_view_name = self.feature_view_name,
             push_source_name = self.push_source_name,
             batch_source = self.batch_source,
             ttl = self.ttl,
         )
+
+        # This is deliberately set outside of the FV initialization as we do not have the Entity objects.
+        fv.entities = self.entities
         fv.projection = copy.copy(self.projection)
         return fv
 
@@ -465,7 +468,7 @@ def on_demand_feature_view(
     tags: Optional[Dict[str, str]] = None,
     owner: str = "",
 
-    entities: List[Entity] = List[None],
+    entities: List[Entity] = None,
     feature_view_name: str = None,
     push_source_name: str = None,
     batch_source: DataSource = None,
