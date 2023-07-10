@@ -79,7 +79,7 @@ def test_hash():
     )
 
     on_demand_feature_view_3 = OnDemandFeatureView(
-        name="my-on-demand-feature-view-persisted3",
+        name="my-on-demand-feature-view-persisted1",
         sources=sources,
         schema=[
             Field(name="output1", dtype=Float32),
