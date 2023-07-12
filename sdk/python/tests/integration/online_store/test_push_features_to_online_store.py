@@ -103,7 +103,7 @@ def test_get_ondemandfeatures_and_push(environment, universal_data_sources):
     assert result["temperature"] == [6]
 
     # Get and update on-demand features
-    result = store.get_online_features_and_update(
+    result = store.get_online_features_and_update_online_store(
             features=[
                 "location_stats_odfv:location_id",
                 "location_stats_odfv:temperature",

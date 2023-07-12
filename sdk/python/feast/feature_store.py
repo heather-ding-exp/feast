@@ -2251,11 +2251,10 @@ class FeatureStore:
 
         return views_to_use
     
-    #TODO: change this function name to something better
-    def get_online_features_and_update(self, features_to_fetch: List[str], 
+    def get_online_features_and_update_online_store(self, features_to_fetch: List[str], 
                                  entity_rows:List[Dict[str, Any]]) -> OnlineResponse:
         """ 
-        Computes and returns on-demand and regular features, pushes the newly computed on-demand features to the online store asynchronously
+        Computes and returns on-demand and regular features, pushes the newly computed on-demand features to the online store via a seperate process(asynchronously).
 
         Args:
         store: The feature store instance from which features are retrieved from
@@ -2277,7 +2276,7 @@ class FeatureStore:
 
     def update_on_demand_feature_views(self, features: OnlineResponse, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]) -> None:
         """
-        Pushes on-demand features to the online store
+        Parses out the on-demand features and pushes all to their respective on-demand feature view copy in the online store in parallel.
 
         Args:
         self: A feast FeatureStore object
@@ -2289,13 +2288,13 @@ class FeatureStore:
             None
         """
         # Get all on-demand feature views needing to be updated
-        on_demand_feature_views = self._get_on_demand_feature_views(features_to_fetch=features_to_fetch)
+        on_demand_feature_views_requiring_update = self._parse_on_demand_feature_views_requiring_update(features_to_fetch=features_to_fetch)
 
-        if not on_demand_feature_views:
+        if len(on_demand_feature_views_requiring_update) == 0:
             warnings.warn("No on-demand feature views for persistence detected, no push executed", UserWarning)
         else:
             # Execute all feature view updates in parallel
-            jobs = [(self, features, od_feature_view, entity_rows) for od_feature_view in on_demand_feature_views]      #TODO: seperate out features relevant to OD_FV before passing into job
+            jobs = [(self, features, od_feature_view, entity_rows) for od_feature_view in on_demand_feature_views_requiring_update]      #TODO: seperate out features relevant to OD_FV before passing into job
             pool = multiprocessing.Pool()                                     
             results = pool.map(self._update_on_demand_feature_views, jobs)    
             pool.close()
@@ -2306,8 +2305,18 @@ class FeatureStore:
 
      # -------------------------------------
     def _update_on_demand_feature_views(self, features: OnlineResponse, odfv: OnDemandFeatureView, input_entity_rows:List[Dict[str, Any]]):
-        #TODO: add a comment explaning this function, transforms feature dataframe to match the schema of the odfv pushing to, push
+        """
+        Transforms feature dataframe to match the schema of the on-demand feature view copy to push to in the online store
 
+        Args:
+        self: A feast FeatureStore object
+        features: A feast OnlineResponse object that represents the features retrieved
+        odfv: The on-demand feature view we want to update persisted value for
+        entity_rows: A list of entities
+
+        Returns:
+            None
+        """
         #TODO: ADD ENTITY INFO MANUALLY. 
 
         # Features dataframe
@@ -2333,49 +2342,46 @@ class FeatureStore:
 
             features_df = pd.merge(features_df, returned_features, on=entity_names)
                 
-                
-        # Add timestamp columns
         features_df["event_timestamp"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
         features_df["created"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
 
-        # Push
         push_source = self.get_data_source(odfv.push_source_name)  
         self.push(push_source, features_df, to=PushMode.ONLINE)
         return
-
-    #TODO: rename this _parse_on_demand_feature_views
-    def _get_on_demand_feature_views(self, features_to_fetch: List[str]) -> List[OnDemandFeatureView]:
+    
+    def _parse_on_demand_feature_views_requiring_update(self, features_to_fetch: List[str]) -> List[OnDemandFeatureView]:
         """
-        Get the on-demand feature views involved in a fetch
-        #TODO: Parse through a list of FeatureView names and On-Demand FeatureViews names, and determine which are On-Demand FeatureViews
+        Parse through a list of features to fetch, and return the list of On-Demand Feature Views that need to be updated 
+        as a result of the fetch
         
-        change to parse out the on demand feature views involved in features to fetch... 
-
         Args:
         self: The feature store instance from which features are retrieved from
         features_to_fetch: A list of FeatureView:FeatureName to retrieve
 
-        Returns: A list of on-demand feature view objects from which features were fetched from 
+        Returns: A list of on-demand feature view objects from which features were fetched from
         """
+        feature_view_names = [feature.split(':', 1)[0] for feature in features_to_fetch]
+        all_on_demand_feature_views = {od_feature_view.name:od_feature_view for od_feature_view in self.list_on_demand_feature_views()}
 
-        # Get on-demand and regular feature views involved in this call, each feature has form FeatureView:FeatureName
-        #TODO: split this line outto a different function
-        feature_view_strs = {feature.split(':', 1)[0] for feature in features_to_fetch}
+        on_demand_feature_views_to_update = []
+        for feature_view_name in feature_view_names:
+            if feature_view_name in all_on_demand_feature_views.keys():
+                on_demand_feature_views_to_update.append(all_on_demand_feature_views[feature_view_name])
 
-        # Get all on-demand feature views defined in the registry
-        #TODO: this is a confusing part, fix this
-        all_od_feature_views = {od_feature_view.name:od_feature_view for od_feature_view in self.list_on_demand_feature_views()}
+        return on_demand_feature_views_to_update
 
-        od_feature_views = []
-        for feature_view_str in feature_view_strs:
-            if feature_view_str in all_od_feature_views.keys():
-                od_feature_views.append(all_od_feature_views[feature_view_str])
-        #TODO: do this instead of the big for loop return list(set(self.list_on_demand_feature_views) & set(feature_view_strs))
-
-        return od_feature_views
+    # def _parse_on_demand_feature_views(self, feature_view_names: List[str]) -> List[str]:
+    #     """
+    #     Parse through a list of Feature Views and On Demand Feature views, and return the list of On-Demand Feature Views
         
-        #return [feature_view for feature_view in self.list_on_demand_feature_views if feature_view in feature_view_strs]
-        #return list(filter(lambda feature_view: feature_view in feature_view_strs, self.list_on_demand_feature_views))
+    #     Args:
+    #     self: The feature store instance from which features are retrieved from
+    #     features_to_fetch: A list of FeatureView:FeatureName to retrieve
+
+    #     Returns: A list of on-demand feature view names
+    #     """
+    #     all_on_demand_feature_view_names = [on_demand_feature_view.name for on_demand_feature_view in self.list_on_demand_feature_views]
+    #     return list(set(all_on_demand_feature_view_names) & set(feature_view_names))
 
     @log_exceptions_and_usage
     def serve(
