@@ -3,14 +3,13 @@ import datetime
 
 import pandas as pd
 import pytest
-from sdk.python.feast.data_source import RequestSource
-from sdk.python.feast.on_demand_feature_view import OnDemandFeatureView
+from feast.data_source import RequestSource
+from feast.on_demand_feature_view import OnDemandFeatureView
 from feast.feature_view import FeatureView
 from feast.field import Field
 from feast.infra.offline_stores.file_source import FileSource
 from feast.on_demand_feature_view import OnDemandFeatureView
 from feast.types import Float32, Int32, Int64
-from feast.feature_store import get_feature_view
 
 from tests.integration.feature_repos.repo_configuration import (
     construct_universal_feature_views,
@@ -58,8 +57,7 @@ def test_get_ondemandfeatures_and_push(environment, universal_data_sources):
     # Define an odfv
     def udf1(features_df: pd.DataFrame) -> pd.DataFrame:
         df = pd.DataFrame()
-        df["location_id"] = features_df["location_id"] + 1
-        df["temperature"] = features_df["temperature"] + 2
+        df["augmented_temperature"] = features_df["temperature"] + 2
         return df
 
     on_demand_location_feature_view = OnDemandFeatureView(
@@ -67,7 +65,7 @@ def test_get_ondemandfeatures_and_push(environment, universal_data_sources):
         sources=[location_fv],
         schema=[
             Field(name="location_id", dtype=Int32),
-            Field(name="temperature", dtype=Int64),
+            Field(name="augmented_temperature", dtype=Int64),
         ],
         udf=udf1,
         udf_string="udf1 source code",
@@ -101,7 +99,7 @@ def test_get_ondemandfeatures_and_push(environment, universal_data_sources):
             full_feature_names=False,
         ).to_dict()
     
-    assert result["location_id"] == [2]
+    assert result["location_id"] == [1]
     assert result["temperature"] == [6]
 
     # Get and update on-demand features
@@ -114,7 +112,7 @@ def test_get_ondemandfeatures_and_push(environment, universal_data_sources):
                 {"location_id": 1},
             ],
         ).to_dict()
-    assert result["location_id"] == [2]
+    assert result["location_id"] == [1]
     assert result["temperature"] == [6]
 
     # Get persisted on-demand features
@@ -129,6 +127,6 @@ def test_get_ondemandfeatures_and_push(environment, universal_data_sources):
             full_feature_names=False,
         ).to_dict()
     
-    assert result["location_id"] == [2]
+    assert result["location_id"] == [1]
     assert result["temperature"] == [6]
 

@@ -89,6 +89,7 @@ class OnDemandFeatureView(BaseFeatureView):
 
     persist: bool 
     entities: List[str]
+    entities_obj: List[Entity]
     feature_view_name: str
     push_source_name: str
     batch_source: DataSource
@@ -178,6 +179,7 @@ class OnDemandFeatureView(BaseFeatureView):
 
         self.persist = persist
         self.entities = [e.name for e in entities] if entities else [DUMMY_ENTITY_NAME]
+        self.entities_obj = entities
         self.feature_view_name = feature_view_name
         self.push_source_name = push_source_name
         self.batch_source = batch_source
@@ -204,6 +206,7 @@ class OnDemandFeatureView(BaseFeatureView):
             push_source_name = self.push_source_name,
             batch_source = self.batch_source,
             ttl = self.ttl,
+            entity_obj=self.entities,
         )
 
         # This is deliberately set outside of the FV initialization as we do not have the Entity objects.
@@ -446,6 +449,17 @@ class OnDemandFeatureView(BaseFeatureView):
                     ),
                 )
             )
+       
+        if self.persist and self.entities_obj:
+            for entity in self.entities_obj:
+                inferred_features.append(
+                    Field(
+                        name=entity.join_key,
+                        dtype=from_value_type(
+                            entity.value_type
+                        ),
+                    )
+            )
 
         if self.features:
             missing_features = []
@@ -464,6 +478,8 @@ class OnDemandFeatureView(BaseFeatureView):
                 "OnDemandFeatureView",
                 f"Could not infer Features for the feature view '{self.name}'.",
             )
+        
+             
 
     @staticmethod
     def get_requested_odfvs(feature_refs, project, registry):

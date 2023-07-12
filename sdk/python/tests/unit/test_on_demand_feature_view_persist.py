@@ -33,6 +33,36 @@ def udf2(features_df: pd.DataFrame) -> pd.DataFrame:
     df["output2"] = features_df["feature2"]
     return df
 
+# def test_apply():
+#     file_source = FileSource(name="my-file-source", path="test.parquet")
+#     feature_view = FeatureView(
+#         name="my-feature-view",
+#         entities=[],
+#         schema=[
+#             Field(name="feature1", dtype=Float32),
+#             Field(name="feature2", dtype=Float32),
+#         ],
+#         source=file_source,
+#     )
+
+#     sources = [feature_view]
+#     on_demand_feature_view_1 = OnDemandFeatureView(
+#         name="my-on-demand-feature-view-persisted1",
+#         sources=sources,
+#         schema=[
+#             Field(name="output1", dtype=Float32),
+#             Field(name="output2", dtype=Float32),
+#         ],
+#         udf=udf1,
+#         udf_string="udf1 source code",
+#         persist=True, 
+#         entities=[], 
+#         feature_view_name="on_demand_feature_view_1_fv",
+#         push_source_name="on_demand_feature_view_1_ps",
+#         batch_source = file_source,
+#     )
+#     store.apply
+
 def test_hash():
     file_source = FileSource(name="my-file-source", path="test.parquet")
     feature_view = FeatureView(
