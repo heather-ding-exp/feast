@@ -2251,28 +2251,38 @@ class FeatureStore:
 
         return views_to_use
     
-    def get_online_features_and_update_online_store(self, features_to_fetch: List[str], 
-                                 entity_rows:List[Dict[str, Any]]) -> OnlineResponse:
+    def get_online_features_and_update_online_store(self, features: List[str], 
+                                 entity_rows:List[Dict[str, Any]],
+                                 full_feature_names: bool = False) -> OnlineResponse:
         """ 
         Computes and returns on-demand and regular features, pushes the newly computed on-demand features to the online store via a seperate process(asynchronously).
 
         Args:
         store: The feature store instance from which features are retrieved from
-        features_to_fetch: A list of FeatureView:FeatureName to retrieve
+        features: A list of FeatureView:FeatureName to retrieve
         entity_rows: A list of entities to fetch features for
+        full_feature_names: If True, feature names will be prefixed with the corresponding feature view name,
+                changing them from the format "FeatureView:FeatureName" to "feature_view__feature" (e.g. "daily_transactions"
+                changes to "customer_fv__daily_transactions").
 
         Returns: On-demand and regular features
         """
-        features = self.get_online_features(
-                features=features_to_fetch,
+
+        if full_feature_names == True:
+            raise ValueError(
+                f"Current implementation currently only supports 'full_feature_names == False'. Got 'full_feature_names == True' instead."
+            )
+
+        features_fetched = self.get_online_features(
+                features=features,
                 entity_rows=entity_rows,
             )
 
         # Spawn seperate process to deal with modifying the returned feature and pushing to online store 
-        process = multiprocessing.Process(target=self.update_on_demand_feature_views(features, features_to_fetch, entity_rows))
+        process = multiprocessing.Process(target=self.update_on_demand_feature_views(features_fetched, features, entity_rows))
         process.start()
 
-        return(features)
+        return(features_fetched)
 
     def update_on_demand_feature_views(self, features: OnlineResponse, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]) -> None:
         """

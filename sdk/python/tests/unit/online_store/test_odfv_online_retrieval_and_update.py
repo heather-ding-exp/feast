@@ -60,11 +60,11 @@ def test_odfv() -> None:
             ],
             full_feature_names=False,
         ).to_dict()
-        assert "cus_specific_avg_orders_day" in result
-        assert "cus_specific_age" in result
+        assert "avg_orders_day" in result
+        assert "specific_age" in result
         assert result["customer_id"] == ["5"]
-        assert result["cus_specific_avg_orders_day"] == [1.0]
-        assert result["cus_specific_age"] == [3]
+        assert result["avg_orders_day"] == [1.0]
+        assert result["age"] == [3]
 
         # Retrieve two on-demand features 
         result = store.get_online_features(
@@ -147,11 +147,11 @@ def test_online_retrieval_and_update() -> None:
             ],
             full_feature_names=False,
         ).to_dict()
-        assert "cus_specific_avg_orders_day" in result
-        assert "cus_specific_age" in result
+        assert "avg_orders_day" in result
+        assert "age" in result
         assert result["customer_id"] == ["5"]
-        assert result["cus_specific_avg_orders_day"] == [1.0]
-        assert result["cus_specific_age"] == [3]
+        assert result["avg_orders_day"] == [1.0]
+        assert result["age"] == [3]
 
         # Retrieve two on-demand features 
         result = store.get_online_features(
@@ -179,7 +179,6 @@ def test_online_retrieval_and_update() -> None:
             entity_rows=[
                 {"customer_id": "5", "customer_inp_1": 1.0},
             ],
-            full_feature_names=False,
         ).to_dict()
         assert "cus_specific_avg_orders_day" in result
         assert "cus_specific_age" in result
