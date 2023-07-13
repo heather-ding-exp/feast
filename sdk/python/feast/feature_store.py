@@ -2317,7 +2317,6 @@ class FeatureStore:
         Returns:
             None
         """
-        #TODO: ADD ENTITY INFO MANUALLY. 
 
         # Features dataframe
         features_df = features.to_df(include_event_timestamps=False)
@@ -2333,7 +2332,8 @@ class FeatureStore:
             features_to_fetch = [persisted_odfv.name + ":" + feature_name for feature_name in features_to_retrive]
 
             entity_names = persisted_odfv.entities  # Entities we join on for the persisted on-demand feature view 
-            entity_rows_to_fetch = [{entity_name: input_entity_rows[entity_name]} for entity_name in entity_names]    # Fetch neccessary entity values from passed in rows
+            entity_rows_to_fetch = [{entity_name: input_entity_row[entity_name] for entity_name in entity_names} for input_entity_row in input_entity_rows]
+
 
             returned_features = self.get_online_features(
                 features=features_to_fetch,
@@ -2341,10 +2341,12 @@ class FeatureStore:
             ).to_df
 
             features_df = pd.merge(features_df, returned_features, on=entity_names)
-                
+
+        for entity_name in entity_names:
+            features_df[entity_name] = [row[entity_name] for row in entity_rows_to_fetch] 
         features_df["event_timestamp"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
         features_df["created"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
-
+    
         push_source = self.get_data_source(odfv.push_source_name)  
         self.push(push_source, features_df, to=PushMode.ONLINE)
         return

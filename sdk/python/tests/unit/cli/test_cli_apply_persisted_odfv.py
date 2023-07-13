@@ -136,4 +136,5 @@ def test_cli_apply_persisted_odfv() -> None:
         store = FeatureStore(repo_path=repo_path, fs_yaml_file=repo_config)
         assert "transformed_customer_rating_fv" and "customer_profile" in [fv.name for fv in store.list_feature_views()]
         assert "transformed_customer_rating_ps" in [ps.name for ps in store.list_data_sources()]
+        #assert "transformed_customer_rating" in [odfv.name for odfv in store.list_on_demand_feature_views()]
         

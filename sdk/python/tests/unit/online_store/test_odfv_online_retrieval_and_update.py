@@ -83,7 +83,6 @@ def test_odfv() -> None:
         assert result["cus_specific_avg_orders_day"] == [2.0]
         assert result["cus_specific_age"] == [4]
 
-
 def test_online_retrieval_and_update() -> None:
     """
     Test reading an ODFV from the online store and updating it in local mode.
