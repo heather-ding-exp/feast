@@ -256,6 +256,7 @@ class OnDemandFeatureView(BaseFeatureView):
             meta.created_timestamp.FromDatetime(self.created_timestamp)
         if self.last_updated_timestamp:
             meta.last_updated_timestamp.FromDatetime(self.last_updated_timestamp)
+
         sources = {}
         for source_name, fv_projection in self.source_feature_view_projections.items():
             sources[source_name] = OnDemandSource(
@@ -281,6 +282,14 @@ class OnDemandFeatureView(BaseFeatureView):
             description=self.description,
             tags=self.tags,
             owner=self.owner,
+
+            persist = self.persist,
+            entities = self.entities,
+            entities_obj = [entity.to_proto() for entity in self.entities_obj],
+            feature_view_name = self.feature_view_name,
+            push_source_name = self.push_source_name,
+            batch_source = self.batch_source.to_proto(),
+            ttl = int(self.ttl.total_seconds()),
         )
 
         return OnDemandFeatureViewProto(spec=spec, meta=meta)
@@ -333,6 +342,13 @@ class OnDemandFeatureView(BaseFeatureView):
             description=on_demand_feature_view_proto.spec.description,
             tags=dict(on_demand_feature_view_proto.spec.tags),
             owner=on_demand_feature_view_proto.spec.owner,
+        
+            persist = on_demand_feature_view_proto.spec.persist,
+            entities_obj = [entity.from_proto() for entity in on_demand_feature_view_proto.spec.entities_obj], #TODO check this
+            feature_view_name = on_demand_feature_view_proto.spec.feature_view_name,
+            push_source_name = on_demand_feature_view_proto.spec.push_source_name,
+            batch_source = on_demand_feature_view_proto.spec.batch_source.from_proto(),
+            ttl = timedelta(seconds=on_demand_feature_view_proto.spec.ttl),
         )
 
         # FeatureViewProjections are not saved in the OnDemandFeatureView proto.

@@ -2277,11 +2277,12 @@ class FeatureStore:
                 features=features,
                 entity_rows=entity_rows,
             )
+        
+        self.update_on_demand_feature_views(features_fetched, features, entity_rows)
 
-        # Spawn seperate process to deal with modifying the returned feature and pushing to online store 
-        process = multiprocessing.Process(target=self.update_on_demand_feature_views(features_fetched, features, entity_rows))
-        process.start()
-
+        # # Spawn seperate process to deal with modifying the returned feature and pushing to online store 
+        # process = multiprocessing.Process(target=self.update_on_demand_feature_views(features_fetched, features, entity_rows))
+        # process.start()
         return(features_fetched)
 
     def update_on_demand_feature_views(self, features: OnlineResponse, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]) -> None:
@@ -2298,17 +2299,23 @@ class FeatureStore:
             None
         """
         # Get all on-demand feature views needing to be updated
+        #TODO: fix this so no repeats
         on_demand_feature_views_requiring_update = self._parse_on_demand_feature_views_requiring_update(features_to_fetch=features_to_fetch)
-
+        print(on_demand_feature_views_requiring_update)
+        
         if len(on_demand_feature_views_requiring_update) == 0:
             warnings.warn("No on-demand feature views for persistence detected, no push executed", UserWarning)
         else:
-            # Execute all feature view updates in parallel
-            jobs = [(self, features, od_feature_view, entity_rows) for od_feature_view in on_demand_feature_views_requiring_update]      #TODO: seperate out features relevant to OD_FV before passing into job
-            pool = multiprocessing.Pool()                                     
-            results = pool.map(self._update_on_demand_feature_views, jobs)    
-            pool.close()
-            pool.join()
+            jobs = [(self, features, od_feature_view, entity_rows) for od_feature_view in on_demand_feature_views_requiring_update]
+            for job in jobs:
+                self._update_on_demand_feature_views(job[1], job[2], job[3])
+
+            # # Execute all feature view updates in parallel
+            # jobs = [(self, features, od_feature_view, entity_rows) for od_feature_view in on_demand_feature_views_requiring_update]      #TODO: seperate out features relevant to OD_FV before passing into job
+            # pool = multiprocessing.Pool()                                     
+            # results = pool.map(self._update_on_demand_feature_views, jobs)    
+            # pool.close()
+            # pool.join()
 
         # TODO: Check results are all good, else return error message
         return
@@ -2332,18 +2339,19 @@ class FeatureStore:
         features_df = features.to_df(include_event_timestamps=False)
 
         # Add neccessary columns, TODO: drop unneccessary columns
-        feature_names = {list(features_df.columns.values)[1:]}      # List of features in dataframe
+        persisted_odfv = self.get_feature_view(odfv.feature_view_name)
+        entity_names = persisted_odfv.entities  # Entities we join on for the persisted on-demand feature view 
+        existing_feature_names = [feature_name for feature_name in list(features_df.columns.values) if feature_name not in entity_names]
+
+        print("hi", existing_feature_names)
         schema = [feature.name for feature in odfv.features]        # The features we need in order to push complete feature view
-        features_to_retrive = [feature_name for feature_name in schema if feature_name not in feature_names]
+        features_to_retrive = [feature_name for feature_name in schema if feature_name not in existing_feature_names]
 
         if len(features_to_retrive) > 0:
             warnings.warn("Incomplete on-demand feature view calculated, manually retrieving uncalculated features", UserWarning)
-            persisted_odfv = self.get_feature_view(odfv.feature_view_name)
+
             features_to_fetch = [persisted_odfv.name + ":" + feature_name for feature_name in features_to_retrive]
-
-            entity_names = persisted_odfv.entities  # Entities we join on for the persisted on-demand feature view 
             entity_rows_to_fetch = [{entity_name: input_entity_row[entity_name] for entity_name in entity_names} for input_entity_row in input_entity_rows]
-
 
             returned_features = self.get_online_features(
                 features=features_to_fetch,
