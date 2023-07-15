@@ -2334,13 +2334,14 @@ class FeatureStore:
         Returns:
             None
         """
-
         # Features dataframe
         features_df = features.to_df(include_event_timestamps=False)
 
         # Add neccessary columns, TODO: drop unneccessary columns
         persisted_odfv = self.get_feature_view(odfv.feature_view_name)
         entity_names = persisted_odfv.entities  # Entities we join on for the persisted on-demand feature view 
+        entity_join_keys = [self.get_entity(entity_name).join_key for entity_name in entity_names]
+
         existing_feature_names = [feature_name for feature_name in list(features_df.columns.values) if feature_name not in entity_names]
 
         schema = [feature.name for feature in odfv.features]        # The features we need in order to push complete feature view
@@ -2350,17 +2351,20 @@ class FeatureStore:
             warnings.warn("Incomplete on-demand feature view calculated, manually retrieving uncalculated features", UserWarning)
 
             features_to_fetch = [persisted_odfv.name + ":" + feature_name for feature_name in features_to_retrive]
-            entity_rows_to_fetch = [{entity_name: input_entity_row[entity_name] for entity_name in entity_names} for input_entity_row in input_entity_rows]
+            entity_rows_to_fetch = [{entity_join_key: input_entity_row[entity_join_key] for entity_join_key in entity_join_keys} for input_entity_row in input_entity_rows]
 
             returned_features = self.get_online_features(
                 features=features_to_fetch,
                 entity_rows=entity_rows_to_fetch,
-            ).to_df
+            ).to_df(include_event_timestamps=False)
 
-            features_df = pd.merge(features_df, returned_features, on=entity_names)
+            print(type(features_df))
+            print(type(returned_features))
 
-        for entity_name in entity_names:
-            entity_join_key = self.get_entity(entity_name).join_key  
+            print(returned_features)
+            features_df = pd.merge(features_df, returned_features, on=entity_join_keys)
+
+        for entity_join_key in entity_join_keys:
             features_df[entity_join_key] = [row[entity_join_key] for row in input_entity_rows] 
         features_df["event_timestamp"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
         features_df["created"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
