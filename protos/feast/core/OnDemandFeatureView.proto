@@ -70,13 +70,13 @@ message OnDemandFeatureViewSpec {
     string feature_view_name = 11;
 
     // Name of push source.
-    string push_source = 12;
+    string push_source_name = 12;
 
     // Batch source.
     DataSource batch_source = 13;
 
     // Time to live.
-    int ttl = 14;
+    int64 ttl = 14;
 }
 
 message OnDemandFeatureViewMeta {

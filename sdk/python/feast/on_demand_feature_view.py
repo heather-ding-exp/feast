@@ -343,10 +343,10 @@ class OnDemandFeatureView(BaseFeatureView):
             owner=on_demand_feature_view_proto.spec.owner,
         
             persist = on_demand_feature_view_proto.spec.persist,
-            entities = [entity.from_proto() for entity in on_demand_feature_view_proto.spec.entities_obj], #TODO check this
+            entities = [Entity.from_proto(entity) for entity in on_demand_feature_view_proto.spec.entities_obj], #TODO check this
             feature_view_name = on_demand_feature_view_proto.spec.feature_view_name,
             push_source_name = on_demand_feature_view_proto.spec.push_source_name,
-            batch_source = on_demand_feature_view_proto.spec.batch_source.from_proto(),
+            batch_source = DataSource.from_proto(on_demand_feature_view_proto.spec.batch_source),
             ttl = timedelta(seconds=on_demand_feature_view_proto.spec.ttl),
         )
 

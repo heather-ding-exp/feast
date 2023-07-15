@@ -2302,7 +2302,7 @@ class FeatureStore:
         #TODO: fix this so no repeats
         on_demand_feature_views_requiring_update = self._parse_on_demand_feature_views_requiring_update(features_to_fetch=features_to_fetch)
         print(on_demand_feature_views_requiring_update)
-        
+
         if len(on_demand_feature_views_requiring_update) == 0:
             warnings.warn("No on-demand feature views for persistence detected, no push executed", UserWarning)
         else:
@@ -2343,7 +2343,6 @@ class FeatureStore:
         entity_names = persisted_odfv.entities  # Entities we join on for the persisted on-demand feature view 
         existing_feature_names = [feature_name for feature_name in list(features_df.columns.values) if feature_name not in entity_names]
 
-        print("hi", existing_feature_names)
         schema = [feature.name for feature in odfv.features]        # The features we need in order to push complete feature view
         features_to_retrive = [feature_name for feature_name in schema if feature_name not in existing_feature_names]
 
@@ -2361,12 +2360,12 @@ class FeatureStore:
             features_df = pd.merge(features_df, returned_features, on=entity_names)
 
         for entity_name in entity_names:
-            features_df[entity_name] = [row[entity_name] for row in entity_rows_to_fetch] 
+            entity_join_key = self.get_entity(entity_name).join_key  
+            features_df[entity_join_key] = [row[entity_join_key] for row in input_entity_rows] 
         features_df["event_timestamp"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
         features_df["created"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
     
-        push_source = self.get_data_source(odfv.push_source_name)  
-        self.push(push_source, features_df, to=PushMode.ONLINE)
+        self.push(odfv.push_source_name, features_df, to=PushMode.ONLINE)
         return
     
     def _parse_on_demand_feature_views_requiring_update(self, features_to_fetch: List[str]) -> List[OnDemandFeatureView]:
