@@ -2306,8 +2306,7 @@ class FeatureStore:
         if len(on_demand_feature_views_requiring_update) == 0:
             warnings.warn(f"No on-demand feature views for persistence detected, no push executed")
         else:
-            jobs = [(self, _parse_features_requiring_update(features, features_to_fetch)
-                     , od_feature_view, entity_rows) for od_feature_view in on_demand_feature_views_requiring_update]
+            jobs = [(self, features, od_feature_view, entity_rows) for od_feature_view in on_demand_feature_views_requiring_update]
             for job in jobs:
                 self._update_on_demand_feature_views(job[1], job[2], job[3])
 
@@ -2322,7 +2321,7 @@ class FeatureStore:
         return
 
      # -------------------------------------
-    def _update_on_demand_feature_views(self, feature_df: pd.DataFrame, odfv: OnDemandFeatureView, input_entity_rows:List[Dict[str, Any]]):
+    def _update_on_demand_feature_views(self, features: OnlineResponse, odfv: OnDemandFeatureView, input_entity_rows:List[Dict[str, Any]]):
         """
         Transforms feature dataframe to match the schema of the on-demand feature view copy to push to in the online store
 
@@ -2335,13 +2334,15 @@ class FeatureStore:
         Returns:
             None
         """
+        # Features dataframe
+        features_df = features.to_df(include_event_timestamps=False)
 
         # Add neccessary columns, TODO: drop unneccessary columns
         persisted_odfv = self.get_feature_view(odfv.feature_view_name)
         entity_names = persisted_odfv.entities  # Entities we join on for the persisted on-demand feature view 
         entity_join_keys = [self.get_entity(entity_name).join_key for entity_name in entity_names]
-        
-        [feature_name for feature_name in list(features_df.columns.values) if feature_name not in entity_names]
+
+        existing_feature_names = [feature_name for feature_name in list(features_df.columns.values) if feature_name not in entity_names]
 
         schema = [feature.name for feature in odfv.features]        # The features we need in order to push complete feature view
         features_to_retrive = [feature_name for feature_name in schema if feature_name not in existing_feature_names]
@@ -2393,8 +2394,18 @@ class FeatureStore:
 
         return on_demand_feature_views_to_update
 
-    def _parse_features_requiring_update(self, features: OnlineResponse, features_to_fetch: List[str]) -> pd.DataFrame:
+    # def _parse_on_demand_feature_views(self, feature_view_names: List[str]) -> List[str]:
+    #     """
+    #     Parse through a list of Feature Views and On Demand Feature views, and return the list of On-Demand Feature Views
+        
+    #     Args:
+    #     self: The feature store instance from which features are retrieved from
+    #     features_to_fetch: A list of FeatureView:FeatureName to retrieve
 
+    #     Returns: A list of on-demand feature view names
+    #     """
+    #     all_on_demand_feature_view_names = [on_demand_feature_view.name for on_demand_feature_view in self.list_on_demand_feature_views]
+    #     return list(set(all_on_demand_feature_view_names) & set(feature_view_names))
 
     @log_exceptions_and_usage
     def serve(
