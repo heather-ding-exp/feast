@@ -19,6 +19,7 @@ import warnings
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
+from itertools import groupby
 from typing import (
     Any,
     Callable,
@@ -2300,13 +2301,12 @@ class FeatureStore:
         """
         # Get all on-demand feature views needing to be updated
         #TODO: fix this so no repeats
-        on_demand_feature_views_requiring_update = self._parse_on_demand_feature_views_requiring_update(features_to_fetch=features_to_fetch)
-        print(on_demand_feature_views_requiring_update)
+        features_to_update = self._parse_on_demand_features_requiring_update(features,features_to_fetch)
 
-        if len(on_demand_feature_views_requiring_update) == 0:
+        if len(features_to_update) == 0:
             warnings.warn(f"No on-demand feature views for persistence detected, no push executed")
         else:
-            jobs = [(self, features, od_feature_view, entity_rows) for od_feature_view in on_demand_feature_views_requiring_update]
+            jobs = [(self, features_df, on_demand_feature_view, entity_rows) for on_demand_feature_view, features_df in features_to_update]
             for job in jobs:
                 self._update_on_demand_feature_views(job[1], job[2], job[3])
 
@@ -2321,33 +2321,32 @@ class FeatureStore:
         return
 
      # -------------------------------------
-    def _update_on_demand_feature_views(self, features: OnlineResponse, odfv: OnDemandFeatureView, input_entity_rows:List[Dict[str, Any]]):
+    def _update_on_demand_feature_views(self, features_df: pd.DataFrame, on_demand_feature_view: OnDemandFeatureView, input_entity_rows:List[Dict[str, Any]]):
         """
         Transforms feature dataframe to match the schema of the on-demand feature view copy to push to in the online store
 
         Args:
         self: A feast FeatureStore object
         features: A feast OnlineResponse object that represents the features retrieved
-        odfv: The on-demand feature view we want to update persisted value for
+        on_demand_feature_view: The on-demand feature view we want to update persisted value for
         entity_rows: A list of entities
 
         Returns:
             None
         """
-        # Features dataframe
-        features_df = features.to_df(include_event_timestamps=False)
+        # Add neccessary columns
 
-        # Add neccessary columns, TODO: drop unneccessary columns
-        persisted_odfv = self.get_feature_view(odfv.feature_view_name)
+        persisted_odfv = self.get_feature_view(on_demand_feature_view.feature_view_name)
         entity_names = persisted_odfv.entities  # Entities we join on for the persisted on-demand feature view 
         entity_join_keys = [self.get_entity(entity_name).join_key for entity_name in entity_names]
 
         existing_feature_names = [feature_name for feature_name in list(features_df.columns.values) if feature_name not in entity_names]
 
-        schema = [feature.name for feature in odfv.features]        # The features we need in order to push complete feature view
-        features_to_retrive = [feature_name for feature_name in schema if feature_name not in existing_feature_names]
-
-
+        schema = [feature.name for feature in on_demand_feature_view.features]        # The features we need in order to push complete feature view
+        features_to_retrive = [feature_name for feature_name in schema if feature_name not in existing_feature_names and feature_name not in entity_join_keys]
+        for entity_join_key in entity_join_keys:
+            features_df[entity_join_key] = [row[entity_join_key] for row in input_entity_rows] 
+            
         if len(features_to_retrive) > 0:
             warnings.warn(
                 f"Incomplete on-demand feature view calculated, manually retrieving uncalculated features. "
@@ -2364,49 +2363,38 @@ class FeatureStore:
 
             features_df = pd.merge(features_df, returned_features, on=entity_join_keys)
 
-        for entity_join_key in entity_join_keys:
-            features_df[entity_join_key] = [row[entity_join_key] for row in input_entity_rows] 
         features_df["event_timestamp"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
         features_df["created"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
     
-        self.push(odfv.push_source_name, features_df, to=PushMode.ONLINE)
+        self.push(on_demand_feature_view.push_source_name, features_df, to=PushMode.ONLINE)
         return
     
-    def _parse_on_demand_feature_views_requiring_update(self, features_to_fetch: List[str]) -> List[OnDemandFeatureView]:
+    def _parse_on_demand_features_requiring_update(self, features: OnlineResponse, features_to_fetch: List[str]) -> List[Tuple[OnDemandFeatureView, pd.DataFrame]]:
         """
-        Parse through a list of features to fetch, and return the list of On-Demand Feature Views that need to be updated 
-        as a result of the fetch
+        Parse through a list of features to fetch, returns a list of On-Demand Feature Views that need to be updated 
+        as a result of the fetch and the corresponding features in dataframe form
         
         Args:
         self: The feature store instance from which features are retrieved from
         features_to_fetch: A list of FeatureView:FeatureName to retrieve
 
-        Returns: A list of on-demand feature view objects from which features were fetched from
+        Returns: A list of (on-demand feature view objects from which features were fetched from, corresponding fetched features dataframe)
         """
-        feature_view_names = [feature.split(':', 1)[0] for feature in features_to_fetch]
+        features_df = features.to_df(include_event_timestamps=False)
+
+        feature_view_names = list(set([feature.split(':', 1)[0] for feature in features_to_fetch]))
         all_on_demand_feature_views = {od_feature_view.name:od_feature_view for od_feature_view in self.list_on_demand_feature_views()}
 
-        on_demand_feature_views_to_update = []
+        features_to_update = []
         for feature_view_name in feature_view_names:
             if feature_view_name in all_on_demand_feature_views.keys():
                 if all_on_demand_feature_views[feature_view_name].persist:
-                    on_demand_feature_views_to_update.append(all_on_demand_feature_views[feature_view_name])
-
-        return on_demand_feature_views_to_update
-
-    # def _parse_on_demand_feature_views(self, feature_view_names: List[str]) -> List[str]:
-    #     """
-    #     Parse through a list of Feature Views and On Demand Feature views, and return the list of On-Demand Feature Views
+                    filtered_features = [feature.split(':')[1] for feature in features_to_fetch if feature.split(':')[0] == feature_view_name]
+                    print("HIIII",feature_view_name, filtered_features)
+                    print(features_df[filtered_features])
+                    features_to_update.append([all_on_demand_feature_views[feature_view_name], features_df[filtered_features]])
+        return features_to_update
         
-    #     Args:
-    #     self: The feature store instance from which features are retrieved from
-    #     features_to_fetch: A list of FeatureView:FeatureName to retrieve
-
-    #     Returns: A list of on-demand feature view names
-    #     """
-    #     all_on_demand_feature_view_names = [on_demand_feature_view.name for on_demand_feature_view in self.list_on_demand_feature_views]
-    #     return list(set(all_on_demand_feature_view_names) & set(feature_view_names))
-
     @log_exceptions_and_usage
     def serve(
         self,
