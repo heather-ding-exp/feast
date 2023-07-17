@@ -61,7 +61,7 @@ def test_odfv() -> None:
             full_feature_names=False,
         ).to_dict()
         assert "avg_orders_day" in result
-        assert "specific_age" in result
+        assert "age" in result
         assert result["customer_id"] == ["5"]
         assert result["avg_orders_day"] == [1.0]
         assert result["age"] == [3]
@@ -293,10 +293,11 @@ def test_online_retrieval_and_update_plus() -> None:
         assert result["cus_specific_avg_orders_day"] == [2.0]
         assert result["cus_specific_age"] == [4]
 
-        # Retrieve and update ome on-demand feature
+        # Retrieve and update only one on-demand persisted feature and one on-demand non-persisted feature
         result = store.get_online_features_and_update_online_store(
             features=[
                 "transformed_customer_rating:cus_specific_avg_orders_day",
+                "transformed_customer_rating_no_persistence:cus_specific_age",
             ],
             entity_rows=[
                 {"customer_id": "5", "customer_inp_1": 1.0},
@@ -305,9 +306,22 @@ def test_online_retrieval_and_update_plus() -> None:
         assert "cus_specific_avg_orders_day" in result
         assert result["customer_id"] == ["5"]
         assert result["cus_specific_avg_orders_day"] == [2.0]
+        assert result["cus_specific_age"] == [4]
 
         # Wait a bit for update to reflect in online store
         time.sleep(5)
+
+        # Retrieve and attempt to update two regular features, 
+        result = store.get_online_features_and_update_online_store(
+            features=[
+                "customer_profile:avg_orders_day",
+                "customer_profile:age",
+            ],
+            entity_rows=[
+                {"customer_id": "5"},
+            ],
+            full_feature_names=False,
+        ).to_dict()
 
         # Retrieve two recently updated online features 
         result = store.get_online_features(
@@ -324,4 +338,5 @@ def test_online_retrieval_and_update_plus() -> None:
         assert "cus_specific_age" in result
         assert result["customer_id"] == ["5"]
         assert result["cus_specific_avg_orders_day"] == [2.0]
+        # This is zero because it theoretically has never been updated
         assert result["cus_specific_age"] == [0]

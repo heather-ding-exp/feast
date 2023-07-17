@@ -67,7 +67,8 @@ class OnDemandFeatureView(BaseFeatureView):
             maintainer.
 
         persist: Flag whether or not this on-demand feature view is persisted in the online store
-        entities: The list of names of entities that this feature view is associated with.
+        entities: The list of names of entities that this on-demand feature view is associated with.
+        entities_obj: The list of entities this on-demand feature view is associated with 
         feature_view_name: The feature view name under which the on-demand feature view is persisted in the online store
         push_source_name: The name of the push source to update the persisted feature view manually
         batch_source: The batch source of data where this group of on-demand features is stored.
@@ -179,7 +180,7 @@ class OnDemandFeatureView(BaseFeatureView):
 
         self.persist = persist
         self.entities = [e.name for e in entities] if entities else [DUMMY_ENTITY_NAME]
-        self.entities_obj = entities
+        self.entities_obj = entities if entities else [DUMMY_ENTITY]
         self.feature_view_name = feature_view_name
         self.push_source_name = push_source_name
         self.batch_source = batch_source
@@ -255,7 +256,7 @@ class OnDemandFeatureView(BaseFeatureView):
         if self.created_timestamp:
             meta.created_timestamp.FromDatetime(self.created_timestamp)
         if self.last_updated_timestamp:
-            meta.last_updated_timestamp.FromDatetime(self.last_updated_timestamp)
+            meta.last_updated_timestamp.FromDatetime(self.last_updated_timestamp)   
 
         sources = {}
         for source_name, fv_projection in self.source_feature_view_projections.items():
@@ -269,7 +270,7 @@ class OnDemandFeatureView(BaseFeatureView):
             sources[source_name] = OnDemandSource(
                 request_data_source=request_sources.to_proto()
             )
-
+        
         spec = OnDemandFeatureViewSpec(
             name=self.name,
             features=[feature.to_proto() for feature in self.features],
@@ -287,9 +288,10 @@ class OnDemandFeatureView(BaseFeatureView):
             entities_obj = [entity.to_proto() for entity in self.entities_obj],
             feature_view_name = self.feature_view_name,
             push_source_name = self.push_source_name,
-            batch_source = self.batch_source.to_proto(),
+            batch_source = None if not self.batch_source else self.batch_source.to_proto(),
             ttl = int(self.ttl.total_seconds()),
         )
+
 
         return OnDemandFeatureViewProto(spec=spec, meta=meta)
 
@@ -346,9 +348,11 @@ class OnDemandFeatureView(BaseFeatureView):
             entities = [Entity.from_proto(entity) for entity in on_demand_feature_view_proto.spec.entities_obj], #TODO check this
             feature_view_name = on_demand_feature_view_proto.spec.feature_view_name,
             push_source_name = on_demand_feature_view_proto.spec.push_source_name,
-            batch_source = DataSource.from_proto(on_demand_feature_view_proto.spec.batch_source),
             ttl = timedelta(seconds=on_demand_feature_view_proto.spec.ttl),
         )
+
+        if on_demand_feature_view_obj.persist:
+            on_demand_feature_view_obj.batch_source = DataSource.from_proto(on_demand_feature_view_proto.spec.batch_source)
 
         # FeatureViewProjections are not saved in the OnDemandFeatureView proto.
         # Create the default projection.

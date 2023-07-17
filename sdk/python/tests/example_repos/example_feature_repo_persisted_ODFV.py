@@ -50,6 +50,21 @@ input_request = RequestSource(
         Field(name="customer_inp_1", dtype=Float32),
     ],
 )
+# Define an on demand feature view which can generate new features based on
+# existing feature views and RequestSource features with no persistence
+@on_demand_feature_view(
+    sources=[customer_profile, input_request],
+    schema=[
+        Field(name="cus_specific_avg_orders_day", dtype=Float64),
+        Field(name="cus_specific_age", dtype=Int64),
+    ],
+)
+
+def transformed_customer_rating_no_persistence(inputs: pd.DataFrame) -> pd.DataFrame:
+    df = pd.DataFrame()
+    df["cus_specific_avg_orders_day"] = inputs["avg_orders_day"] + inputs["customer_inp_1"]
+    df["cus_specific_age"] = inputs["age"] + 1
+    return df
 
 # Define an on demand feature view which can generate new features based on
 # existing feature views and RequestSource features
