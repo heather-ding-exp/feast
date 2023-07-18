@@ -259,7 +259,8 @@ def test_online_retrieval_and_update_plus() -> None:
             progress=None,
         )
 
-        # Retrieve two features, 
+        print("Retrieving two online features")
+        start_time = time.time()
         result = store.get_online_features(
             features=[
                 "customer_profile:avg_orders_day",
@@ -270,13 +271,16 @@ def test_online_retrieval_and_update_plus() -> None:
             ],
             full_feature_names=False,
         ).to_dict()
+        end_time = time.time() 
+        print("Elapsed time:", end_time - start_time, "seconds")
         assert "avg_orders_day" in result
         assert "age" in result
         assert result["customer_id"] == ["5"]
         assert result["avg_orders_day"] == [1.0]
         assert result["age"] == [3]
 
-        # Retrieve two on-demand features 
+        print("Retrieving two on-demand features")
+        start_time = time.time()
         result = store.get_online_features(
             features=[
                 "transformed_customer_rating:cus_specific_avg_orders_day",
@@ -287,13 +291,36 @@ def test_online_retrieval_and_update_plus() -> None:
             ],
             full_feature_names=False,
         ).to_dict()
+        end_time = time.time()
+        print("Elapsed time:", end_time - start_time, "seconds")
         assert "cus_specific_avg_orders_day" in result
         assert "cus_specific_age" in result
         assert result["customer_id"] == ["5"]
         assert result["cus_specific_avg_orders_day"] == [2.0]
         assert result["cus_specific_age"] == [4]
 
-        # Retrieve and update only one on-demand persisted feature and one on-demand non-persisted feature
+        print("Retrieving and updating two on-demand features")
+        start_time = time.time()
+        result = store.get_online_features_and_update_online_store(
+            features=[
+                "transformed_customer_rating:cus_specific_avg_orders_day",
+                "transformed_customer_rating:cus_specific_age",
+            ],
+            entity_rows=[
+                {"customer_id": "5", "customer_inp_1": 1.0},
+            ],
+        ).to_dict()
+        end_time = time.time()
+        print("Elapsed time:", end_time - start_time, "seconds")
+
+        assert "cus_specific_avg_orders_day" in result
+        assert result["customer_id"] == ["5"]
+        assert result["cus_specific_avg_orders_day"] == [2.0]
+        assert result["cus_specific_age"] == [4]
+
+
+        print("Retrieve and update only one on-demand persisted feature and one on-demand non-persisted feature")
+        start_time = time.time()
         result = store.get_online_features_and_update_online_store(
             features=[
                 "transformed_customer_rating:cus_specific_avg_orders_day",
@@ -303,6 +330,9 @@ def test_online_retrieval_and_update_plus() -> None:
                 {"customer_id": "5", "customer_inp_1": 1.0},
             ],
         ).to_dict()
+        end_time = time.time()
+        print("Elapsed time:", end_time - start_time, "seconds")
+
         assert "cus_specific_avg_orders_day" in result
         assert result["customer_id"] == ["5"]
         assert result["cus_specific_avg_orders_day"] == [2.0]
@@ -311,7 +341,8 @@ def test_online_retrieval_and_update_plus() -> None:
         # Wait a bit for update to reflect in online store
         time.sleep(5)
 
-        # Retrieve and attempt to update two regular features, 
+        print("Retrieve and attempt to update two regular features")
+        start_time = time.time()
         result = store.get_online_features_and_update_online_store(
             features=[
                 "customer_profile:avg_orders_day",
@@ -322,8 +353,11 @@ def test_online_retrieval_and_update_plus() -> None:
             ],
             full_feature_names=False,
         ).to_dict()
+        end_time = time.time()
+        print("Elapsed time:", end_time - start_time, "seconds")
 
-        # Retrieve two recently updated online features 
+        print("Retrieve two historical on-demand features")
+        start_time = time.time()
         result = store.get_online_features(
             features=[
                 "transformed_customer_rating_fv:cus_specific_avg_orders_day",
@@ -334,9 +368,11 @@ def test_online_retrieval_and_update_plus() -> None:
             ],
             full_feature_names=False,
         ).to_dict()
+        end_time = time.time()
+        print("Elapsed time:", end_time - start_time, "seconds")
+
         assert "cus_specific_avg_orders_day" in result
         assert "cus_specific_age" in result
         assert result["customer_id"] == ["5"]
         assert result["cus_specific_avg_orders_day"] == [2.0]
-        # This is zero because it theoretically has never been updated
-        assert result["cus_specific_age"] == [0]
+        assert result["cus_specific_age"] == [4]

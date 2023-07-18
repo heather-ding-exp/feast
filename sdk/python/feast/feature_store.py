@@ -2279,11 +2279,11 @@ class FeatureStore:
                 entity_rows=entity_rows,
             )
         
-        # self.update_on_demand_feature_views(features_fetched, features, entity_rows)
+        self.update_on_demand_feature_views(features_fetched, features, entity_rows)
 
         # Spawn seperate process to deal with modifying the returned feature and pushing to online store 
-        process = multiprocessing.Process(target=self.update_on_demand_feature_views(features_fetched, features, entity_rows))
-        process.start()
+        # process = multiprocessing.Process(target=self.update_on_demand_feature_views, args =(features_fetched, features, entity_rows))
+        # process.start()
         return(features_fetched)
 
     def update_on_demand_feature_views(self, features: OnlineResponse, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]) -> None:
@@ -2304,18 +2304,18 @@ class FeatureStore:
         if len(features_to_update) == 0:
             warnings.warn(f"No on-demand feature views for persistence detected, no push executed")
         else:
-            processes = []
-            for on_demand_feature_view, features_df in features_to_update:
-                p = multiprocessing.Process(target=self._update_on_demand_feature_views(features_df, on_demand_feature_view, entity_rows))
-                processes.append(p)
-                p.start()
+            # processes = []
+            # for on_demand_feature_view, features_df in features_to_update:
+            #     p = multiprocessing.Process(target=self._update_on_demand_feature_views(features_df, on_demand_feature_view, entity_rows))
+            #     processes.append(p)
+            #     p.start()
 
-            for p in processes:
-                p.join()
+            # for p in processes:
+            #     p.join()
 
-            # jobs = [(self, features_df, on_demand_feature_view, entity_rows) for on_demand_feature_view, features_df in features_to_update]
-            # for job in jobs:
-            #     self._update_on_demand_feature_views(job[1], job[2], job[3])
+            jobs = [(self, features_df, on_demand_feature_view, entity_rows) for on_demand_feature_view, features_df in features_to_update]
+            for job in jobs:
+                self._update_on_demand_feature_views(job[1], job[2], job[3])
 
             # Execute all feature view updates in parallel 
             # pool = multiprocessing.Pool()                                     
@@ -2375,32 +2375,40 @@ class FeatureStore:
         self.push(on_demand_feature_view.push_source_name, features_df, to=PushMode.ONLINE)
         return
     
-    def _parse_on_demand_features_requiring_update(self, features: OnlineResponse, features_to_fetch: List[str]) -> List[Tuple[OnDemandFeatureView, pd.DataFrame]]:
+    def _parse_on_demand_features_requiring_update(self, fetched_features: OnlineResponse, features_to_fetch: List[str]) -> List[Tuple[OnDemandFeatureView, pd.DataFrame]]:
         """
-        Parse through a list of features to fetch, returns a list of On-Demand Feature Views that need to be updated 
-        as a result of the fetch and the corresponding features in dataframe form
-        
+        Parse through the list of features to fetch and retrieved online features, returns a list of persisted OnDemandFeatureViews that require 
+        their historical features to be updated in the online store and the feature values to update them with.
+
         Args:
         self: The feature store instance from which features are retrieved from
-        features_to_fetch: A list of FeatureView:FeatureName to retrieve
+        fetched_features: An OnlineResponse object containing the feature values to store in the online store
+        features_to_fetch: A list of FeatureView:FeatureName retrieved
 
-        Returns: A list of (on-demand feature view objects from which features were fetched from, corresponding fetched features dataframe)
+        Returns: A list of (OnDemandFeatureViews requiring update, values dataframe to update with)
         """
-        features_df = features.to_df(include_event_timestamps=False)
+        features_df = fetched_features.to_df(include_event_timestamps=False)
 
-        feature_view_names = list(set([feature.split(':', 1)[0] for feature in features_to_fetch]))
-        all_on_demand_feature_views = {od_feature_view.name:od_feature_view for od_feature_view in self.list_on_demand_feature_views()}
+        # feature_view_names = list(set([feature.split(':', 1)[0] for feature in features_to_fetch]))
+        # all_on_demand_feature_views = {od_feature_view.name:od_feature_view for od_feature_view in self.list_on_demand_feature_views()}
+
+        # features_to_update = []
+        # for feature_view_name in feature_view_names:
+        #     if feature_view_name in all_on_demand_feature_views.keys():
+        #         if all_on_demand_feature_views[feature_view_name].persist:
+        #             filtered_features = [feature.split(':')[1] for feature in features_to_fetch if feature.split(':')[0] == feature_view_name]
+        #             features_to_update.append([all_on_demand_feature_views[feature_view_name], features_df[filtered_features]])
+        # return features_to_update
+
+        (_, _, on_demand_feature_views) = self._get_feature_views_to_use(features_to_fetch)
 
         features_to_update = []
-        for feature_view_name in feature_view_names:
-            if feature_view_name in all_on_demand_feature_views.keys():
-                if all_on_demand_feature_views[feature_view_name].persist:
-                    filtered_features = [feature.split(':')[1] for feature in features_to_fetch if feature.split(':')[0] == feature_view_name]
-                    print("HIIII",feature_view_name, filtered_features)
-                    print(features_df[filtered_features])
-                    features_to_update.append([all_on_demand_feature_views[feature_view_name], features_df[filtered_features]])
+        for on_demand_feature_view in on_demand_feature_views:
+            if on_demand_feature_view.persist:
+                filtered_features = [feature.split(':')[1] for feature in features_to_fetch if feature.split(':')[0] == on_demand_feature_view.name]
+                features_to_update.append([on_demand_feature_view, features_df[filtered_features]])
         return features_to_update
-        
+
     @log_exceptions_and_usage
     def serve(
         self,
