@@ -13,7 +13,7 @@
 # limitations under the License.
 import copy
 import itertools
-import multiprocessing
+from multiprocess import Process
 import os
 import warnings
 from collections import Counter, defaultdict
@@ -2279,11 +2279,12 @@ class FeatureStore:
                 entity_rows=entity_rows,
             )
         
-        self.update_on_demand_feature_views(features_fetched, features, entity_rows)
+        #self.update_on_demand_feature_views(features_fetched, features, entity_rows)
 
-        # Spawn seperate process to deal with modifying the returned feature and pushing to online store 
-        # process = multiprocessing.Process(target=self.update_on_demand_feature_views, args =(features_fetched, features, entity_rows))
-        # process.start()
+        
+        #Spawn seperate process to deal with modifying the returned feature and pushing to online store 
+        process = Process(target=self.update_on_demand_feature_views, args =(features_fetched, features, entity_rows))
+        process.start()
         return(features_fetched)
 
     def update_on_demand_feature_views(self, features: OnlineResponse, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]) -> None:
@@ -2329,7 +2330,7 @@ class FeatureStore:
      # -------------------------------------
     def _update_on_demand_feature_views(self, features_df: pd.DataFrame, on_demand_feature_view: OnDemandFeatureView, input_entity_rows:List[Dict[str, Any]]):
         """
-        Transforms feature dataframe to match the schema of the on-demand feature view copy to push to in the online store
+        Transforms feature dataframe to match the schema of the on-demand feature view copy, to push to in the online store
 
         Args:
         self: A feast FeatureStore object
@@ -2341,7 +2342,6 @@ class FeatureStore:
             None
         """
         # Add neccessary columns
-
         persisted_odfv = self.get_feature_view(on_demand_feature_view.feature_view_name)
         entity_names = persisted_odfv.entities  # Entities we join on for the persisted on-demand feature view 
         entity_join_keys = [self.get_entity(entity_name).join_key for entity_name in entity_names]
@@ -2388,26 +2388,14 @@ class FeatureStore:
         Returns: A list of (OnDemandFeatureViews requiring update, values dataframe to update with)
         """
         features_df = fetched_features.to_df(include_event_timestamps=False)
-
-        # feature_view_names = list(set([feature.split(':', 1)[0] for feature in features_to_fetch]))
-        # all_on_demand_feature_views = {od_feature_view.name:od_feature_view for od_feature_view in self.list_on_demand_feature_views()}
-
-        # features_to_update = []
-        # for feature_view_name in feature_view_names:
-        #     if feature_view_name in all_on_demand_feature_views.keys():
-        #         if all_on_demand_feature_views[feature_view_name].persist:
-        #             filtered_features = [feature.split(':')[1] for feature in features_to_fetch if feature.split(':')[0] == feature_view_name]
-        #             features_to_update.append([all_on_demand_feature_views[feature_view_name], features_df[filtered_features]])
-        # return features_to_update
-
         (_, _, on_demand_feature_views) = self._get_feature_views_to_use(features_to_fetch)
 
-        features_to_update = []
+        to_update = []
         for on_demand_feature_view in on_demand_feature_views:
             if on_demand_feature_view.persist:
                 filtered_features = [feature.split(':')[1] for feature in features_to_fetch if feature.split(':')[0] == on_demand_feature_view.name]
-                features_to_update.append([on_demand_feature_view, features_df[filtered_features]])
-        return features_to_update
+                to_update.append([on_demand_feature_view, features_df[filtered_features]])
+        return to_update
 
     @log_exceptions_and_usage
     def serve(
