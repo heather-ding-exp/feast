@@ -41,7 +41,7 @@ install-python-ci-dependencies:
 	COMPILE_GO=true python3 setup.py develop
 
 lock-python-ci-dependencies:
-	python -m piptools compile -U --extra ci --output-file sdk/python/requirements/py$(PYTHON)-ci-requirements.txt
+	python3 -m piptools compile -U --extra ci --output-file sdk/python/requirements/py$(PYTHON)-ci-requirements.txt
 
 package-protos:
 	cp -r ${ROOT_DIR}/protos ${ROOT_DIR}/sdk/python/feast/protos
@@ -50,17 +50,17 @@ compile-protos-python:
 	python3 setup.py build_python_protos --inplace
 
 install-python:
-	python -m piptools sync sdk/python/requirements/py$(PYTHON)-requirements.txt
-	python setup.py develop
+	python3 -m piptools sync sdk/python/requirements/py$(PYTHON)-requirements.txt
+	python3 setup.py develop
 
 lock-python-dependencies:
-	python -m piptools compile -U --output-file sdk/python/requirements/py$(PYTHON)-requirements.txt
+	python3 -m piptools compile -U --output-file sdk/python/requirements/py$(PYTHON)-requirements.txt
 
 benchmark-python:
-	FEAST_USAGE=False IS_TEST=True python -m pytest --integration --benchmark  --benchmark-autosave --benchmark-save-data sdk/python/tests
+	FEAST_USAGE=False IS_TEST=True python3 -m pytest --integration --benchmark  --benchmark-autosave --benchmark-save-data sdk/python/tests
 
 benchmark-python-local:
-	FEAST_USAGE=False IS_TEST=True FEAST_IS_LOCAL_TEST=True python -m pytest --integration --benchmark  --benchmark-autosave --benchmark-save-data sdk/python/tests
+	FEAST_USAGE=False IS_TEST=True FEAST_IS_LOCAL_TEST=True python3 -m pytest --integration --benchmark  --benchmark-autosave --benchmark-save-data sdk/python/tests
 
 test-python:
 	FEAST_USAGE=False \
@@ -89,7 +89,7 @@ test-python-integration-container:
 		FEAST_USAGE=False \
 		IS_TEST=True \
 		FEAST_LOCAL_ONLINE_CONTAINER=True \
-		python -m pytest -n 8 --integration sdk/python/tests \
+		python3 -m pytest -n 8 --integration sdk/python/tests \
 	) || echo "This script uses Docker, and it isn't running - please start the Docker Daemon and try again!";
 
 test-python-universal-spark:
@@ -304,16 +304,16 @@ test-python-universal:
 
 format-python:
 	# Sort
-	cd ${ROOT_DIR}/sdk/python; python -m isort feast/ tests/
+	cd ${ROOT_DIR}/sdk/python; python3 -m isort feast/ tests/
 
 	# Format
-	cd ${ROOT_DIR}/sdk/python; python -m black --target-version py38 feast tests
+	cd ${ROOT_DIR}/sdk/python; python3 -m black --target-version py38 feast tests
 
 lint-python:
-	cd ${ROOT_DIR}/sdk/python; python -m mypy
-	cd ${ROOT_DIR}/sdk/python; python -m isort feast/ tests/ --check-only
-	cd ${ROOT_DIR}/sdk/python; python -m flake8 feast/ tests/
-	cd ${ROOT_DIR}/sdk/python; python -m black --check feast tests
+	cd ${ROOT_DIR}/sdk/python; python3 -m mypy
+	cd ${ROOT_DIR}/sdk/python; python3 -m isort feast/ tests/ --check-only
+	cd ${ROOT_DIR}/sdk/python; python3 -m flake8 feast/ tests/
+	cd ${ROOT_DIR}/sdk/python; python3 -m black --check feast tests
 
 # Java
 
@@ -441,7 +441,7 @@ build-sphinx: compile-protos-python
 	cd 	$(ROOT_DIR)/sdk/python/docs && $(MAKE) build-api-source
 
 build-templates:
-	python infra/scripts/compile-templates.py
+	python3 infra/scripts/compile-templates.py
 
 build-helm-docs:
 	cd ${ROOT_DIR}/infra/charts/feast; helm-docs

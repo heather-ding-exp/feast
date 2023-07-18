@@ -2279,11 +2279,11 @@ class FeatureStore:
                 entity_rows=entity_rows,
             )
         
-        self.update_on_demand_feature_views(features_fetched, features, entity_rows)
+        # self.update_on_demand_feature_views(features_fetched, features, entity_rows)
 
-        # # Spawn seperate process to deal with modifying the returned feature and pushing to online store 
-        # process = multiprocessing.Process(target=self.update_on_demand_feature_views(features_fetched, features, entity_rows))
-        # process.start()
+        # Spawn seperate process to deal with modifying the returned feature and pushing to online store 
+        process = multiprocessing.Process(target=self.update_on_demand_feature_views(features_fetched, features, entity_rows))
+        process.start()
         return(features_fetched)
 
     def update_on_demand_feature_views(self, features: OnlineResponse, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]) -> None:
@@ -2299,19 +2299,25 @@ class FeatureStore:
         Returns:
             None
         """
-        # Get all on-demand feature views needing to be updated
-        #TODO: fix this so no repeats
         features_to_update = self._parse_on_demand_features_requiring_update(features,features_to_fetch)
 
         if len(features_to_update) == 0:
             warnings.warn(f"No on-demand feature views for persistence detected, no push executed")
         else:
-            jobs = [(self, features_df, on_demand_feature_view, entity_rows) for on_demand_feature_view, features_df in features_to_update]
-            for job in jobs:
-                self._update_on_demand_feature_views(job[1], job[2], job[3])
+            processes = []
+            for on_demand_feature_view, features_df in features_to_update:
+                p = multiprocessing.Process(target=self._update_on_demand_feature_views(features_df, on_demand_feature_view, entity_rows))
+                processes.append(p)
+                p.start()
 
-            # # Execute all feature view updates in parallel
-            # jobs = [(self, features, od_feature_view, entity_rows) for od_feature_view in on_demand_feature_views_requiring_update]      #TODO: seperate out features relevant to OD_FV before passing into job
+            for p in processes:
+                p.join()
+
+            # jobs = [(self, features_df, on_demand_feature_view, entity_rows) for on_demand_feature_view, features_df in features_to_update]
+            # for job in jobs:
+            #     self._update_on_demand_feature_views(job[1], job[2], job[3])
+
+            # Execute all feature view updates in parallel 
             # pool = multiprocessing.Pool()                                     
             # results = pool.map(self._update_on_demand_feature_views, jobs)    
             # pool.close()
@@ -2346,7 +2352,7 @@ class FeatureStore:
         features_to_retrive = [feature_name for feature_name in schema if feature_name not in existing_feature_names and feature_name not in entity_join_keys]
         for entity_join_key in entity_join_keys:
             features_df[entity_join_key] = [row[entity_join_key] for row in input_entity_rows] 
-            
+
         if len(features_to_retrive) > 0:
             warnings.warn(
                 f"Incomplete on-demand feature view calculated, manually retrieving uncalculated features. "
