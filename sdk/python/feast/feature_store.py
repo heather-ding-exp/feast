@@ -2259,7 +2259,7 @@ class FeatureStore:
         return views_to_use
     
     def get_online_features_and_update_online_store(self, features: List[str], 
-                                 entity_rows:List[Dict[str, Any]],
+                                 entity_rows:List[Dict[str, Any]], queue: Queue = None,
                                  full_feature_names: bool = False) -> OnlineResponse:
         """ 
         Computes and returns on-demand and regular features, pushes the newly computed on-demand features to the online store via a seperate process(asynchronously).
@@ -2268,6 +2268,7 @@ class FeatureStore:
         store: The feature store instance from which features are retrieved from
         features: A list of FeatureView:FeatureName to retrieve
         entity_rows: A list of entities to fetch features for
+        queue: The queue object to process async update jobs
         full_feature_names: If True, feature names will be prefixed with the corresponding feature view name,
                 changing them from the format "FeatureView:FeatureName" to "feature_view__feature" (e.g. "daily_transactions"
                 changes to "customer_fv__daily_transactions").
@@ -2284,19 +2285,21 @@ class FeatureStore:
                 features=features,
                 entity_rows=entity_rows,
             )
-        copy = features_fetched
-        copy.to_df(include_event_timestamps=False)
+        
+        if queue:
+            copy = features_fetched
+            copy = copy.to_df(include_event_timestamps=False)
+            queue.put((copy, features, entity_rows))
+        else:
+            self.update_on_demand_feature_views(copy, features, entity_rows)
 
-        process = Process(target=self.update_on_demand_feature_views, args =(copy, features, entity_rows))
-        process.start()
-
+        # process = Process(target=self.update_on_demand_feature_views, args =(copy, features, entity_rows))
+        # process.start()
         return(features_fetched)
     
-    def receive_input_and_run(self, queue):
+    def receive_update_on_demand_feature_view_reqs_and_run(self, queue):
         while True:
-            # Wait for new input
             input_data = queue.get()
-            # Run the function
             if input_data == 'exit':
                 break
             self.update_on_demand_feature_views(input_data[0], input_data[1], input_data[2])
