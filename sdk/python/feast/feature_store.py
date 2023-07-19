@@ -2286,9 +2286,9 @@ class FeatureStore:
                 entity_rows=entity_rows,
             )
         
+        copy = features_fetched
+        copy = copy.to_df(include_event_timestamps=False)
         if queue:
-            copy = features_fetched
-            copy = copy.to_df(include_event_timestamps=False)
             queue.put((copy, features, entity_rows))
         else:
             self.update_on_demand_feature_views(copy, features, entity_rows)
@@ -2322,6 +2322,8 @@ class FeatureStore:
         if len(features_to_update) == 0:
             warnings.warn(f"No on-demand feature views for persistence detected, no push executed")
         else:
+            for on_demand_feature_view, features_df in features_to_update:
+                self._update_on_demand_feature_views(features_df, on_demand_feature_view, entity_rows)
             # processes = []
             # for on_demand_feature_view, features_df in features_to_update:
             #     p = Process(target=self._update_on_demand_feature_views(features_df, on_demand_feature_view, entity_rows))
@@ -2331,36 +2333,32 @@ class FeatureStore:
             # for p in processes:
             #     p.join()
 
-            jobs = [(self, features_df, on_demand_feature_view, entity_rows) for on_demand_feature_view, features_df in features_to_update]
-            for job in jobs:
-                self._update_on_demand_feature_views(job[1], job[2], job[3])
-
         # TODO: Check results are all good, else return error message
         return
 
      # -------------------------------------
     def _update_on_demand_feature_views(self, features_df: pd.DataFrame, on_demand_feature_view: OnDemandFeatureView, input_entity_rows:List[Dict[str, Any]]):
         """
-        Transforms feature dataframe to match the schema of the on-demand feature view copy, to push to in the online store
+        Transforms feature dataframe to match the schema of the on-demand feature view copy, pushes to the online store
 
         Args:
         self: A feast FeatureStore object
-        features: A feast OnlineResponse object that represents the features retrieved
+        features: A Pandas Dataframe that contains the features retrieved post transformation
         on_demand_feature_view: The on-demand feature view we want to update persisted value for
-        entity_rows: A list of entities
+        input_entity_rows: A list of input entity information
 
         Returns:
             None
         """
-        # Add neccessary columns
         persisted_odfv = self.get_feature_view(on_demand_feature_view.feature_view_name)
-        entity_names = persisted_odfv.entities  # Entities we join on for the persisted on-demand feature view 
-        entity_join_keys = [self.get_entity(entity_name).join_key for entity_name in entity_names]
 
-        existing_feature_names = [feature_name for feature_name in list(features_df.columns.values) if feature_name not in entity_names]
+        # Add neccessary columns                                    
+        entity_join_keys = [self.get_entity(entity_name).join_key for entity_name in persisted_odfv.entities]
+        existing_feature_names = set(list(features_df.columns.values)) | set(entity_join_keys)
+        schema = {feature.name for feature in on_demand_feature_view.features}  
 
-        schema = [feature.name for feature in on_demand_feature_view.features]        # The features we need in order to push complete feature view
-        features_to_retrive = [feature_name for feature_name in schema if feature_name not in existing_feature_names and feature_name not in entity_join_keys]
+        features_to_retrive = list(schema - existing_feature_names)
+
         for entity_join_key in entity_join_keys:
             features_df[entity_join_key] = [row[entity_join_key] for row in input_entity_rows] 
 
@@ -2382,19 +2380,19 @@ class FeatureStore:
 
         features_df["event_timestamp"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
         features_df["created"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
-    
         self.push(on_demand_feature_view.push_source_name, features_df, to=PushMode.ONLINE)
         return
     
     def _parse_on_demand_features_requiring_update(self, fetched_features: pd.DataFrame, features_to_fetch: List[str]) -> List[Tuple[OnDemandFeatureView, pd.DataFrame]]:
         """
-        Parse through the list of features to fetch and retrieved online features, returns a list of persisted OnDemandFeatureViews that require 
-        their historical features to be updated in the online store and the feature values to update them with.
+        Parse through the list of features to fetch and dataframe containing retrieved online features.
+        Returns a list of persisted OnDemandFeatureViews that require their historical features 
+        to be updated in the online store, and Dataframes containing the feature values to update them with.
 
         Args:
         self: The feature store instance from which features are retrieved from
-        fetched_features: An OnlineResponse object containing the feature values to store in the online store
-        features_to_fetch: A list of FeatureView:FeatureName retrieved
+        fetched_features:  A Pandas Dataframe that contains the features retrieved post transformation to store in the online store
+        features_to_fetch: A list of the FeatureView:FeatureNames retrieved
 
         Returns: A list of (OnDemandFeatureViews requiring update, values dataframe to update with)
         """
