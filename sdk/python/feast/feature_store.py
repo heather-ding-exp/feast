@@ -13,7 +13,7 @@
 # limitations under the License.
 import copy
 import itertools
-from multiprocess import Process
+from multiprocess import Process, Queue
 import os
 import warnings
 from collections import Counter, defaultdict
@@ -2284,13 +2284,24 @@ class FeatureStore:
                 features=features,
                 entity_rows=entity_rows,
             )
-        
-        process = AutoJoinProcess(target=self.update_on_demand_feature_views, args =(features_fetched, features, entity_rows))
+        copy = features_fetched
+        copy.to_df(include_event_timestamps=False)
+
+        process = Process(target=self.update_on_demand_feature_views, args =(copy, features, entity_rows))
         process.start()
 
         return(features_fetched)
+    
+    def receive_input_and_run(self, queue):
+        while True:
+            # Wait for new input
+            input_data = queue.get()
+            # Run the function
+            if input_data == 'exit':
+                break
+            self.update_on_demand_feature_views(input_data[0], input_data[1], input_data[2])
 
-    def update_on_demand_feature_views(self, features: OnlineResponse, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]) -> None:
+    def update_on_demand_feature_views(self, features: pd.DataFrame, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]) -> None:
         """
         Parses out the on-demand features and pushes all to their respective on-demand feature view copy in the online store in parallel.
 
@@ -2372,7 +2383,7 @@ class FeatureStore:
         self.push(on_demand_feature_view.push_source_name, features_df, to=PushMode.ONLINE)
         return
     
-    def _parse_on_demand_features_requiring_update(self, fetched_features: OnlineResponse, features_to_fetch: List[str]) -> List[Tuple[OnDemandFeatureView, pd.DataFrame]]:
+    def _parse_on_demand_features_requiring_update(self, fetched_features: pd.DataFrame, features_to_fetch: List[str]) -> List[Tuple[OnDemandFeatureView, pd.DataFrame]]:
         """
         Parse through the list of features to fetch and retrieved online features, returns a list of persisted OnDemandFeatureViews that require 
         their historical features to be updated in the online store and the feature values to update them with.
@@ -2384,7 +2395,7 @@ class FeatureStore:
 
         Returns: A list of (OnDemandFeatureViews requiring update, values dataframe to update with)
         """
-        features_df = fetched_features.to_df(include_event_timestamps=False)
+        features_df = fetched_features
         (_, _, on_demand_feature_views) = self._get_feature_views_to_use(features_to_fetch)
 
         to_update = []

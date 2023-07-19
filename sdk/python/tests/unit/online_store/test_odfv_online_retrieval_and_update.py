@@ -25,11 +25,6 @@ def test_odfv() -> None:
     with runner.local_repo(
         get_example_repo("example_feature_repo_ODFV.py"), "file"
     ) as store:
-        
-        input_queue = Queue()
-        process = Process(target=store.get_online_features_and_update_online_store, args=(input_queue,))
-        process.start()
-
         # Write some data to two tables
         customer_profile_fv = store.get_feature_view(name="customer_profile")
 
@@ -98,7 +93,6 @@ def test_online_retrieval_and_update() -> None:
     with runner.local_repo(
         get_example_repo("example_feature_repo_persisted_ODFV.py"), "file"
     ) as store:
-        
         # Write some data to two tables
         customer_profile_fv = store.get_feature_view(name="customer_profile")
         transformed_customer_rating_fv = store.get_feature_view(name = "transformed_customer_rating_fv")
@@ -222,6 +216,10 @@ def test_online_retrieval_and_update_plus() -> None:
         get_example_repo("example_feature_repo_persisted_ODFV.py"), "file"
     ) as store:
         
+        input_queue = Queue()
+        process = Process(target=store.receive_input_and_run, args=(input_queue,))
+        process.start()
+        
         # Write some data to two tables
         customer_profile_fv = store.get_feature_view(name="customer_profile")
         transformed_customer_rating_fv = store.get_feature_view(name = "transformed_customer_rating_fv")
@@ -296,7 +294,6 @@ def test_online_retrieval_and_update_plus() -> None:
             entity_rows=[
                 {"customer_id": "5", "customer_inp_1": 1.0},
             ],
-            full_feature_names=False,
         ).to_dict()
         end_time = time.time()
         print("Elapsed time:", end_time - start_time, "seconds")
@@ -308,7 +305,7 @@ def test_online_retrieval_and_update_plus() -> None:
 
         print("Retrieving and updating two on-demand features")
         start_time = time.time()
-        result = store.get_online_features_and_update_online_store(
+        result = store.get_online_features(
             features=[
                 "transformed_customer_rating:cus_specific_avg_orders_day",
                 "transformed_customer_rating:cus_specific_age",
@@ -316,9 +313,25 @@ def test_online_retrieval_and_update_plus() -> None:
             entity_rows=[
                 {"customer_id": "5", "customer_inp_1": 1.0},
             ],
-        ).to_dict()
+        )
+        copy = result
+        copy = copy.to_df(include_event_timestamps=False)
+        result = result.to_dict()
+
+        input_queue.put(
+            [copy,
+            [
+                "transformed_customer_rating:cus_specific_avg_orders_day",
+                "transformed_customer_rating:cus_specific_age",
+            ],
+            [
+                {"customer_id": "5", "customer_inp_1": 1.0},
+            ]])
         end_time = time.time()
         print("Elapsed time:", end_time - start_time, "seconds")
+
+        # Wait a bit for update to reflect in online store
+        time.sleep(5)
 
         assert "cus_specific_avg_orders_day" in result
         assert result["customer_id"] == ["5"]
@@ -328,7 +341,7 @@ def test_online_retrieval_and_update_plus() -> None:
 
         print("Retrieve and update only one on-demand persisted feature and one on-demand non-persisted feature")
         start_time = time.time()
-        result = store.get_online_features_and_update_online_store(
+        result = store.get_online_features(
             features=[
                 "transformed_customer_rating:cus_specific_avg_orders_day",
                 "transformed_customer_rating_no_persistence:cus_specific_age",
@@ -336,32 +349,44 @@ def test_online_retrieval_and_update_plus() -> None:
             entity_rows=[
                 {"customer_id": "5", "customer_inp_1": 1.0},
             ],
-        ).to_dict()
+        )
+        copy = result
+        copy = copy.to_df(include_event_timestamps=False)
+        result = result.to_dict()
+
+        input_queue.put(
+            [copy,
+            [
+                "transformed_customer_rating:cus_specific_avg_orders_day",
+                "transformed_customer_rating_no_persistence:cus_specific_age",
+            ],
+            [
+                {"customer_id": "5", "customer_inp_1": 1.0},
+            ]])
         end_time = time.time()
         print("Elapsed time:", end_time - start_time, "seconds")
-
         assert "cus_specific_avg_orders_day" in result
         assert result["customer_id"] == ["5"]
         assert result["cus_specific_avg_orders_day"] == [2.0]
         assert result["cus_specific_age"] == [4]
 
-        # Wait a bit for update to reflect in online store
-        time.sleep(5)
+        # # Wait a bit for update to reflect in online store
+        # time.sleep(5)
 
-        print("Retrieve and attempt to update two regular features")
-        start_time = time.time()
-        result = store.get_online_features_and_update_online_store(
-            features=[
-                "customer_profile:avg_orders_day",
-                "customer_profile:age",
-            ],
-            entity_rows=[
-                {"customer_id": "5"},
-            ],
-            full_feature_names=False,
-        ).to_dict()
-        end_time = time.time()
-        print("Elapsed time:", end_time - start_time, "seconds")
+        # print("Retrieve and attempt to update two regular features")
+        # start_time = time.time()
+        # result = store.get_online_features_and_update_online_store(
+        #     features=[
+        #         "customer_profile:avg_orders_day",
+        #         "customer_profile:age",
+        #     ],
+        #     entity_rows=[
+        #         {"customer_id": "5"},
+        #     ],
+        #     full_feature_names=False,
+        # ).to_dict()
+        # end_time = time.time()
+        # print("Elapsed time:", end_time - start_time, "seconds")
 
         print("Retrieve two historical on-demand features")
         start_time = time.time()
@@ -383,3 +408,7 @@ def test_online_retrieval_and_update_plus() -> None:
         assert result["customer_id"] == ["5"]
         assert result["cus_specific_avg_orders_day"] == [2.0]
         assert result["cus_specific_age"] == [4]
+
+        input_queue.put('exit')
+        process.join()
+
