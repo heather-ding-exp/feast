@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import pdb
 import time
@@ -6,6 +7,8 @@ from datetime import datetime
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
+
+from multiprocess import Queue, Process
 
 from feast import FeatureStore, RepoConfig
 from feast.errors import FeatureViewNotFoundException
@@ -23,6 +26,10 @@ def test_odfv() -> None:
         get_example_repo("example_feature_repo_ODFV.py"), "file"
     ) as store:
         
+        input_queue = Queue()
+        process = Process(target=store.get_online_features_and_update_online_store, args=(input_queue,))
+        process.start()
+
         # Write some data to two tables
         customer_profile_fv = store.get_feature_view(name="customer_profile")
 

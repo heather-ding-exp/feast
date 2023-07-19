@@ -102,6 +102,12 @@ from feast.version import get_version
 
 warnings.simplefilter("once", DeprecationWarning)
 
+class AutoJoinProcess(Process):
+    def run(self):
+        super().run()  # Run the original run() method
+
+        # Perform the join operation after the target function completes
+        self.join()
 
 class FeatureStore:
     """
@@ -2279,12 +2285,9 @@ class FeatureStore:
                 entity_rows=entity_rows,
             )
         
-        #self.update_on_demand_feature_views(features_fetched, features, entity_rows)
-
-        
-        #Spawn seperate process to deal with modifying the returned feature and pushing to online store 
-        process = Process(target=self.update_on_demand_feature_views, args =(features_fetched, features, entity_rows))
+        process = AutoJoinProcess(target=self.update_on_demand_feature_views, args =(features_fetched, features, entity_rows))
         process.start()
+
         return(features_fetched)
 
     def update_on_demand_feature_views(self, features: OnlineResponse, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]) -> None:
@@ -2307,7 +2310,7 @@ class FeatureStore:
         else:
             # processes = []
             # for on_demand_feature_view, features_df in features_to_update:
-            #     p = multiprocessing.Process(target=self._update_on_demand_feature_views(features_df, on_demand_feature_view, entity_rows))
+            #     p = Process(target=self._update_on_demand_feature_views(features_df, on_demand_feature_view, entity_rows))
             #     processes.append(p)
             #     p.start()
 
@@ -2317,12 +2320,6 @@ class FeatureStore:
             jobs = [(self, features_df, on_demand_feature_view, entity_rows) for on_demand_feature_view, features_df in features_to_update]
             for job in jobs:
                 self._update_on_demand_feature_views(job[1], job[2], job[3])
-
-            # Execute all feature view updates in parallel 
-            # pool = multiprocessing.Pool()                                     
-            # results = pool.map(self._update_on_demand_feature_views, jobs)    
-            # pool.close()
-            # pool.join()
 
         # TODO: Check results are all good, else return error message
         return
