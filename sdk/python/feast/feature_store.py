@@ -13,6 +13,7 @@
 # limitations under the License.
 import copy
 import itertools
+import time
 from multiprocess import Process, Queue
 import os
 import warnings
@@ -2351,16 +2352,15 @@ class FeatureStore:
             None
         """
         persisted_odfv = self.get_feature_view(on_demand_feature_view.feature_view_name)
-
-        # Add neccessary columns                                    
         entity_join_keys = [self.get_entity(entity_name).join_key for entity_name in persisted_odfv.entities]
+        for entity_join_key in entity_join_keys:
+            features_df[entity_join_key] = [row[entity_join_key] for row in input_entity_rows] 
+
+        # Determine neccessary columns to add                              
         existing_feature_names = set(list(features_df.columns.values)) | set(entity_join_keys)
         schema = {feature.name for feature in on_demand_feature_view.features}  
 
         features_to_retrive = list(schema - existing_feature_names)
-
-        for entity_join_key in entity_join_keys:
-            features_df[entity_join_key] = [row[entity_join_key] for row in input_entity_rows] 
 
         if len(features_to_retrive) > 0:
             warnings.warn(
