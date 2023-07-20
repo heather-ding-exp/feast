@@ -1,25 +1,19 @@
-import os
-import pdb
 import time
-from datetime import datetime
 import warnings
 
-import pandas as pd
-import pytest
+from datetime import datetime
 from pandas.testing import assert_frame_equal
 
 from multiprocess import Queue, Process
 
-from feast import FeatureStore, RepoConfig
-from feast.errors import FeatureViewNotFoundException
 from feast.protos.feast.types.EntityKey_pb2 import EntityKey as EntityKeyProto
 from feast.protos.feast.types.Value_pb2 import Value as ValueProto
-from feast.repo_config import RegistryConfig
+
 from tests.utils.cli_repo_creator import CliRunner, get_example_repo
 
 def run_demo() -> None:
     """
-    Demo!!
+    Demo that exhibits full capabilities of get_online_features_and_update_online_store()!!!
     """
     warnings.filterwarnings("ignore")
     

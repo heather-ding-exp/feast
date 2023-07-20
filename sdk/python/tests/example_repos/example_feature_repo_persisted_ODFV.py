@@ -62,6 +62,7 @@ input_request = RequestSource(
 )
 
 def transformed_customer_rating_no_persistence(inputs: pd.DataFrame) -> pd.DataFrame:
+    time.sleep(0.5)
     df = pd.DataFrame()
     df["cus_specific_avg_orders_day"] = inputs["avg_orders_day"] + inputs["customer_inp_1"]
     df["cus_specific_age"] = inputs["age"] + 1
@@ -84,7 +85,7 @@ def transformed_customer_rating_no_persistence(inputs: pd.DataFrame) -> pd.DataF
 )
 
 def transformed_customer_rating(inputs: pd.DataFrame) -> pd.DataFrame:
-    #time.sleep(0.5)
+    time.sleep(0.5)
     df = pd.DataFrame()
     df["cus_specific_avg_orders_day"] = inputs["avg_orders_day"] + inputs["customer_inp_1"]
     df["cus_specific_age"] = inputs["age"] + 1
