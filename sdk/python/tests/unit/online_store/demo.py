@@ -83,7 +83,7 @@ def run_demo() -> None:
             full_feature_names=False,
         ).to_dict()
         end_time = time.time() 
-        print("Elapsed time:", end_time - start_time, "seconds")
+        print("Elapsed time:", round((end_time - start_time)*1000), "Milliseconds")
         for key, value in sorted(result.items()):
             print(key, " : ", value)
 
@@ -100,7 +100,7 @@ def run_demo() -> None:
             full_feature_names=False,
         ).to_dict()
         end_time = time.time()
-        print("Elapsed time:", end_time - start_time, "seconds")
+        print("Elapsed time:", round((end_time - start_time)*1000), "Milliseconds")
         for key, value in sorted(result.items()):
             print(key, " : ", value)
 
@@ -112,53 +112,16 @@ def run_demo() -> None:
                 "transformed_customer_rating:cus_specific_age",
             ],
             entity_rows=[
-                {"customer_id": "5", "customer_inp_1": 1.0},
+                {"customer_id": "5", "customer_inp_1": 10.0},
             ], 
             queue=input_queue
         ).to_dict()
         end_time = time.time()
-        print("Elapsed time:", end_time - start_time, "seconds")
+        print("Elapsed time:", round((end_time - start_time)*1000), "Milliseconds")
         for key, value in sorted(result.items()):
             print(key, " : ", value)
 
-        # Wait a bit for update to reflect in online store
         time.sleep(5)
-
-        print("\n--- Retrieve and update only one on-demand persisted feature and one on-demand non-persisted feature ---")
-        start_time = time.time()
-        result = store.get_online_features_and_update_online_store(
-            features=[
-                "transformed_customer_rating:cus_specific_avg_orders_day",
-                "transformed_customer_rating_no_persistence:cus_specific_age",
-            ],
-            entity_rows=[
-                {"customer_id": "5", "customer_inp_1": 1.0},
-            ],
-            queue=input_queue
-        ).to_dict()
-        end_time = time.time()
-        print("Elapsed time:", end_time - start_time, "seconds")
-        for key, value in sorted(result.items()):
-            print(key, " : ", value)
-
-        # Wait a bit for update to reflect in online store
-        time.sleep(5)
-
-        print("\n--- Retrieve and attempt to update two regular features ---")
-        start_time = time.time()
-        result = store.get_online_features_and_update_online_store(
-            features=[
-                "customer_profile:avg_orders_day",
-                "customer_profile:age",
-            ],
-            entity_rows=[
-                {"customer_id": "5"},
-            ],
-            full_feature_names=False,
-            queue=input_queue
-        ).to_dict()
-        end_time = time.time()
-        print("Elapsed time:", end_time - start_time, "seconds")
 
         print("\n--- Retrieve two historical on-demand features ---")
         start_time = time.time()
@@ -173,9 +136,45 @@ def run_demo() -> None:
             full_feature_names=False,
         ).to_dict()
         end_time = time.time()
-        print("Elapsed time:", end_time - start_time, "seconds")
+        print("Elapsed time:", round((end_time - start_time)*1000), "Milliseconds")
         for key, value in sorted(result.items()):
             print(key, " : ", value)
+
+        # print("\n--- Retrieve and update only one on-demand persisted feature and one on-demand non-persisted feature ---")
+        # start_time = time.time()
+        # result = store.get_online_features_and_update_online_store(
+        #     features=[
+        #         "transformed_customer_rating:cus_specific_avg_orders_day",
+        #         "transformed_customer_rating_no_persistence:cus_specific_age",
+        #     ],
+        #     entity_rows=[
+        #         {"customer_id": "5", "customer_inp_1": 1.0},
+        #     ],
+        #     queue=input_queue
+        # ).to_dict()
+        # end_time = time.time()
+        # print("Elapsed time:", round((end_time - start_time)*1000), "Milliseconds")
+        # for key, value in sorted(result.items()):
+        #     print(key, " : ", value)
+
+        # # Wait a bit for update to reflect in online store
+        # time.sleep(5)
+
+        # print("\n--- Retrieve and attempt to update two regular features ---")
+        # start_time = time.time()
+        # result = store.get_online_features_and_update_online_store(
+        #     features=[
+        #         "customer_profile:avg_orders_day",
+        #         "customer_profile:age",
+        #     ],
+        #     entity_rows=[
+        #         {"customer_id": "5"},
+        #     ],
+        #     full_feature_names=False,
+        #     queue=input_queue
+        # ).to_dict()
+        # end_time = time.time()
+        # print("Elapsed time:", round((end_time - start_time)*1000), "Milliseconds")
 
         input_queue.put('exit')
         process.join()

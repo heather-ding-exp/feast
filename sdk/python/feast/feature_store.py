@@ -2294,8 +2294,6 @@ class FeatureStore:
         else:
             self.update_on_demand_feature_views(copy, features, entity_rows)
 
-        # process = Process(target=self.update_on_demand_feature_views, args =(copy, features, entity_rows))
-        # process.start()
         return(features_fetched)
     
     def receive_update_on_demand_feature_view_reqs_and_run(self, queue):

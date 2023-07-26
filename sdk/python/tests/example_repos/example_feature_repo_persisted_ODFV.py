@@ -85,11 +85,10 @@ def transformed_customer_rating_no_persistence(inputs: pd.DataFrame) -> pd.DataF
 )
 
 def transformed_customer_rating(inputs: pd.DataFrame) -> pd.DataFrame:
-    time.sleep(0.5)
+    time.sleep(0.05)
     df = pd.DataFrame()
     df["cus_specific_avg_orders_day"] = inputs["avg_orders_day"] + inputs["customer_inp_1"]
-    df["cus_specific_age"] = inputs["age"] + 1
-    #df["customer_id"] = inputs["customer_id"] 
+    df["cus_specific_age"] = inputs["age"] + 100
     return df
 
 all_customers_feature_service = FeatureService(
