@@ -262,23 +262,7 @@ class BuildPythonProtosCommand(Command):
 
         return os.path.join(self.build_lib, "feast/protos")
 
-    def _generate_python_protos(self, path: str):
-        proto_files = glob.glob(os.path.join(self.proto_folder, path))
-        Path(self.python_folder).mkdir(parents=True, exist_ok=True)
-        subprocess.check_call(
-            self.python_protoc
-            + [
-                "-I",
-                self.proto_folder,
-                "--python_out",
-                self.python_folder,
-                "--grpc_python_out",
-                self.python_folder,
-                "--mypy_out",
-                self.python_folder,
-            ]
-            + proto_files
-        )
+    
 
     def run(self):
         for sub_folder in self.sub_folders:

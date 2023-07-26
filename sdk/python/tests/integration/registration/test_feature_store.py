@@ -18,6 +18,7 @@ from tempfile import mkstemp
 
 import pytest
 from pytest_lazyfixture import lazy_fixture
+import pandas as pd
 
 from feast import FileSource
 from feast.data_format import ParquetFormat
@@ -30,6 +31,7 @@ from feast.infra.online_stores.dynamodb import DynamoDBOnlineStoreConfig
 from feast.infra.online_stores.sqlite import SqliteOnlineStoreConfig
 from feast.repo_config import RepoConfig
 from feast.types import Array, Bytes, Float64, Int64, String
+from sdk.python.feast.on_demand_feature_view import OnDemandFeatureView
 from tests.utils.data_source_test_creator import prep_file_source
 
 
@@ -182,6 +184,149 @@ def test_apply_feature_view_integration(test_feature_store):
     assert len(feature_views) == 0
 
     test_feature_store.teardown()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "test_feature_store_w_persisted_odfvs",
+    [
+        lazy_fixture("feature_store_with_gcs_registry"),
+        lazy_fixture("feature_store_with_s3_registry"),
+    ],
+)
+def test_apply_on_demand_feature_view_persistence_integration(test_feature_store_w_persisted_odfvs):
+    # Create Feature Views
+    batch_source = FileSource(
+        file_format=ParquetFormat(),
+        path="file://feast/*",
+        timestamp_field="ts_col",
+        created_timestamp_column="timestamp",
+    )
+
+    entity = Entity(name="fs1_my_entity_1", join_keys=["test"])
+
+    fv1 = FeatureView(
+        name="my_feature_view_1",
+        schema=[
+            Field(name="fs1_my_feature_1", dtype=Int64),
+            Field(name="fs1_my_feature_2", dtype=String),
+            Field(name="fs1_my_feature_3", dtype=Array(String)),
+            Field(name="fs1_my_feature_4", dtype=Array(Bytes)),
+            Field(name="test", dtype=Int64),
+        ],
+        entities=[entity],
+        tags={"team": "matchmaking"},
+        source=batch_source,
+        ttl=timedelta(minutes=5),
+    )
+
+    def udf1(features_df: pd.DataFrame) -> pd.DataFrame:
+        df = pd.DataFrame()
+        df["odf1_my_feature_1"] = features_df["fs1_my_feature_1"] + 1
+        df["odf1_my_feature_2"] = features_df["fs1_my_feature_2"]
+        df["odf1_my_feature_3"] = features_df["fs1_my_feature_3"]
+        df["odf1_my_feature_4"] = features_df["fs1_my_feature_4"]
+        return df
+
+    odfv1 = OnDemandFeatureView(
+        name="my_odfv_1",
+        schema=[
+            Field(name="odf1_my_feature_1", dtype=Int64),
+            Field(name="odf1_my_feature_2", dtype=String),
+            Field(name="odf1_my_feature_3", dtype=Array(String)),
+            Field(name="odf1_my_feature_4", dtype=Array(Bytes)),
+            Field(name="test", dtype=Int64),
+        ],
+        sources=[fv1],
+        udf=udf1,
+        udf_string="basic test udf",
+        description="test odfv1",
+        persist=True,
+        entities=[entity],
+        feature_view_name="my_odfv_1_fv",
+        push_source_name="my_odfv_1_ps",
+        batch_source=batch_source,
+    )
+
+    # Register Feature View, On Demand Feature View
+    test_feature_store_w_persisted_odfvs.apply([fv1, entity, odfv1])
+
+    feature_views = test_feature_store_w_persisted_odfvs.list_feature_views()
+
+    # List Feature Views
+    assert (
+        len(feature_views) == 2 
+        and feature_views[1].name == "my_odfv_1_fv"
+        and feature_views[1].features[0].name == "odf1_my_feature_1"
+        and feature_views[1].features[0].dtype == Int64
+        and feature_views[1].features[1].name == "odf1_my_feature_2"
+        and feature_views[1].features[1].dtype == String
+        and feature_views[1].features[2].name == "odf1_my_feature_3"
+        and feature_views[1].features[2].dtype == Array(String)
+        and feature_views[1].features[3].name == "odf1_my_feature_4"
+        and feature_views[1].features[3].dtype == Array(Bytes)
+        and feature_views[1].entities[0] == "odf1_my_entity_1"
+    )
+
+    feature_view = test_feature_store_w_persisted_odfvs.get_feature_view("my_odfv_1_fv")
+    assert (
+        feature_view.name == "my_odfv_1_fv"
+        and feature_view.features[0].name == "odf1_my_feature_1"
+        and feature_view.features[0].dtype == Int64
+        and feature_view.features[1].name == "odf1_my_feature_2"
+        and feature_view.features[1].dtype == String
+        and feature_view.features[2].name == "odf1_my_feature_3"
+        and feature_view.features[2].dtype == Array(String)
+        and feature_view.features[3].name == "odf1_my_feature_4"
+        and feature_view.features[3].dtype == Array(Bytes)
+        and feature_view.entities[0] == "odf1_my_entity_1"
+    )
+
+    #List On Demand Feature Views
+    odfvs = test_feature_store_w_persisted_odfvs.list_on_demand_feature_views()
+    assert(
+        len(odfvs) == 1
+    )
+    odfv = test_feature_store_w_persisted_odfvs.get_on_demand_feature_view("my_odfv_1")
+    assert(
+        odfv.name == "my_odfv_1"
+        and odfv.features[0].name == "odf1_my_feature_1"
+        and odfv.features[0].dtype == Int64
+        and odfv.features[1].name == "odf1_my_feature_2"
+        and odfv.features[1].dtype == String
+        and odfv.features[2].name == "odf1_my_feature_3"
+        and odfv.features[2].dtype == Array(String)
+        and odfv.features[3].name == "odf1_my_feature_4"
+        and odfv.features[3].dtype == Array(Bytes)
+        and odfv.entities[0] == "odf1_my_entity_1"
+        and odfv.persist == True
+        and odfv.feature_view_name == "my_odfv_1_fv"
+        and odfv.push_source_name == "my_odfv_1_ps"
+        and odfv.batch_source == batch_source
+        and odfv.udf == udf1
+    )
+
+    # List Data Sources
+    data_sources = test_feature_store_w_persisted_odfvs.list_data_sources()
+    assert(
+        len(data_sources) == 1
+        and data_sources[0].name == "my_odfv_1_ps"
+    )
+
+    push_source = test_feature_store_w_persisted_odfvs.get_data_source("my_odfv_1_ps")
+    assert(
+        push_source.name == "my_odfv_1_ps"
+        and push_source.batch_source == batch_source
+    )
+
+
+    test_feature_store_w_persisted_odfvs.delete_feature_view("my_feature_view_1")
+    feature_views = test_feature_store_w_persisted_odfvs.list_feature_views()
+    assert len(feature_views) == 1
+    test_feature_store_w_persisted_odfvs.delete_feature_view("my_odfv_1_fv")
+    assert len(feature_views) == 0
+
+    test_feature_store_w_persisted_odfvs.teardown()
 
 
 @pytest.fixture

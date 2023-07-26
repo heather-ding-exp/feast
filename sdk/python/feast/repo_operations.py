@@ -2,6 +2,7 @@ import base64
 import importlib
 import json
 import os
+import pdb
 import random
 import re
 import sys
@@ -246,6 +247,20 @@ def extract_objects_for_apply_delete(project, registry, repo):
         objs_to_add,
     ) = extract_objects_for_keep_delete_update_add(registry, project, repo)
 
+    # # Register feature view, push source, batch source for persisted odfvs
+    # for on_demand_feature_view in objs_to_add[FeastObjectType.ON_DEMAND_FEATURE_VIEW]:
+    #     if on_demand_feature_view.persist == True:
+    #         # Assert feature view name, entities, push source name, batch_source exist
+    #         objs_to_add[FeastObjectType.DATA_SOURCE].add(on_demand_feature_view.batch_source)
+    #         #TODO: add description, tags,owner
+    #         push_source = PushSource(name=on_demand_feature_view.push_source_name, batch_source=on_demand_feature_view.batch_source)
+    #         objs_to_add[FeastObjectType.DATA_SOURCE].add(push_source)
+    #         #TODO: add description, tags,owner
+    #         feature_view = FeatureView(name=on_demand_feature_view.feature_view_name, source=push_source, 
+    #                                    schema=on_demand_feature_view.features, ttl=on_demand_feature_view.ttl, online=True,
+    #                                     entities=on_demand_feature_view.entities_obj)
+    #         objs_to_add[FeastObjectType.FEATURE_VIEW].add(feature_view)
+
     all_to_apply: List[
         Union[
             Entity,
@@ -256,9 +271,11 @@ def extract_objects_for_apply_delete(project, registry, repo):
             FeatureService,
         ]
     ] = []
+
     for object_type in FEAST_OBJECT_TYPES:
         to_apply = set(objs_to_add[object_type]).union(objs_to_update[object_type])
         all_to_apply.extend(to_apply)
+    #print(all_to_apply)
 
     all_to_delete: List[
         Union[

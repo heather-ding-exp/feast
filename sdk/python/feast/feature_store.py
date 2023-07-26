@@ -13,11 +13,14 @@
 # limitations under the License.
 import copy
 import itertools
+import time
+from multiprocess import Process, Queue
 import os
 import warnings
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
+from itertools import groupby
 from typing import (
     Any,
     Callable,
@@ -100,6 +103,12 @@ from feast.version import get_version
 
 warnings.simplefilter("once", DeprecationWarning)
 
+class AutoJoinProcess(Process):
+    def run(self):
+        super().run()  # Run the original run() method
+
+        # Perform the join operation after the target function completes
+        self.join()
 
 class FeatureStore:
     """
@@ -711,6 +720,24 @@ class FeatureStore:
             ...     entities=[driver],
             ...     feature_services=list())) # register entity and feature view
         """
+        # Register feature view, push source, and batch_source for on demand feature view
+        for on_demand_feature_view in desired_repo_contents.on_demand_feature_views:
+            if on_demand_feature_view.persist:
+                # Add batch source
+                if on_demand_feature_view.batch_source not in desired_repo_contents.data_sources:
+                    desired_repo_contents.data_sources.append(on_demand_feature_view.batch_source)
+
+                # Create and add push_source #TODO: add description, tags,owner
+                push_source = PushSource(name=on_demand_feature_view.push_source_name, batch_source=on_demand_feature_view.batch_source) 
+                desired_repo_contents.data_sources.append(push_source)
+
+                # Create and add feature view #TODO: add description, tags,owner
+                feature_view = FeatureView(name=on_demand_feature_view.feature_view_name, source=push_source, schema=on_demand_feature_view.features, ttl=on_demand_feature_view.ttl, online=True)
+                # This is deliberately set outside of the FV initialization as we do not have the Entity objects.
+                feature_view.entities = on_demand_feature_view.entities
+
+                desired_repo_contents.feature_views.append(feature_view) 
+
         # Validate and run inference on all the objects to be registered.
         self._validate_all_feature_views(
             desired_repo_contents.feature_views,
@@ -881,11 +908,28 @@ class FeatureStore:
             for v in odfv.source_request_sources.values():
                 data_sources_set_to_update.add(v)
 
+            # Register feature view, push source, batch source for persisted odfvs
+            if odfv.persist == True:
+                # Assert feature view name, entities, push source name, batch_source exist
+
+                # Add batch source
+                data_sources_set_to_update.add(odfv.batch_source)
+                # Create and add push_source #TODO: add description, tags,owner
+                push_source = PushSource(name=odfv.push_source_name, batch_source=odfv.batch_source) 
+                data_sources_set_to_update.add(push_source) 
+
+                # Create and add feature view #TODO: add description, tags,owner
+                feature_view = FeatureView(name=odfv.feature_view_name, source=push_source, schema=odfv.features, ttl=odfv.ttl, online=True)
+                # This is deliberately set outside of the FV initialization as we do not have the Entity objects.
+                feature_view.entities = odfv.entities
+                views_to_update.append(feature_view) 
+                
+
         data_sources_to_update = list(data_sources_set_to_update)
 
         # Handle all entityless feature views by using DUMMY_ENTITY as a placeholder entity.
         entities_to_update.append(DUMMY_ENTITY)
-
+            
         # Validate all feature views and make inferences.
         self._validate_all_feature_views(
             views_to_update, odfvs_to_update, request_views_to_update, sfvs_to_update
@@ -951,6 +995,7 @@ class FeatureStore:
             validation_references_to_delete = [
                 ob for ob in objects_to_delete if isinstance(ob, ValidationReference)
             ]
+
 
             for data_source in data_sources_to_delete:
                 self._registry.delete_data_source(
@@ -2213,6 +2258,151 @@ class FeatureStore:
             )
 
         return views_to_use
+    
+    def get_online_features_and_update_online_store(self, features: List[str], 
+                                 entity_rows:List[Dict[str, Any]], queue: Queue = None,
+                                 full_feature_names: bool = False) -> OnlineResponse:
+        """ 
+        Computes and returns on-demand and regular features, pushes the newly computed on-demand features to the online store via a seperate process(asynchronously).
+
+        Args:
+        store: The feature store instance from which features are retrieved from
+        features: A list of FeatureView:FeatureName to retrieve
+        entity_rows: A list of entities to fetch features for
+        queue: The queue object to process async update jobs
+        full_feature_names: If True, feature names will be prefixed with the corresponding feature view name,
+                changing them from the format "FeatureView:FeatureName" to "feature_view__feature" (e.g. "daily_transactions"
+                changes to "customer_fv__daily_transactions").
+
+        Returns: On-demand and regular features
+        """
+
+        if full_feature_names == True:
+            raise ValueError(
+                f"Current implementation currently only supports 'full_feature_names == False'. Got 'full_feature_names == True' instead."
+            )
+
+        features_fetched = self.get_online_features(
+                features=features,
+                entity_rows=entity_rows,
+            )
+        
+        copy = features_fetched
+        copy = copy.to_df(include_event_timestamps=False)
+        if queue:
+            queue.put((copy, features, entity_rows))
+        else:
+            self.update_on_demand_feature_views(copy, features, entity_rows)
+
+        return(features_fetched)
+    
+    def receive_update_on_demand_feature_view_reqs_and_run(self, queue):
+        while True:
+            input_data = queue.get()
+            if input_data == 'exit':
+                break
+            self.update_on_demand_feature_views(input_data[0], input_data[1], input_data[2])
+
+    def update_on_demand_feature_views(self, features: pd.DataFrame, features_to_fetch: List[str], entity_rows:List[Dict[str, Any]]) -> None:
+        """
+        Parses out the on-demand features and pushes all to their respective on-demand feature view copy in the online store in parallel.
+
+        Args:
+        self: A feast FeatureStore object
+        returned_features: A feast OnlineResponse object that represents the on-demand feature views
+        features_to_fetch: A list of FeatureView:FeatureName or OnDemandFeatureView:FeatureName retrieved
+        entity_rows: A list of entities to fetch features for
+
+        Returns:
+            None
+        """
+        features_to_update = self._parse_on_demand_features_requiring_update(features,features_to_fetch)
+
+        if len(features_to_update) == 0:
+            warnings.warn(f"No on-demand feature views for persistence detected, no push executed")
+        else:
+            for on_demand_feature_view, features_df in features_to_update:
+                self._update_on_demand_feature_views(features_df, on_demand_feature_view, entity_rows)
+            # processes = []
+            # for on_demand_feature_view, features_df in features_to_update:
+            #     p = Process(target=self._update_on_demand_feature_views(features_df, on_demand_feature_view, entity_rows))
+            #     processes.append(p)
+            #     p.start()
+
+            # for p in processes:
+            #     p.join()
+
+        # TODO: Check results are all good, else return error message
+        return
+
+     # -------------------------------------
+    def _update_on_demand_feature_views(self, features_df: pd.DataFrame, on_demand_feature_view: OnDemandFeatureView, input_entity_rows:List[Dict[str, Any]]):
+        """
+        Transforms feature dataframe to match the schema of the on-demand feature view copy, pushes to the online store
+
+        Args:
+        self: A feast FeatureStore object
+        features: A Pandas Dataframe that contains the features retrieved post transformation
+        on_demand_feature_view: The on-demand feature view we want to update persisted value for
+        input_entity_rows: A list of input entity information
+
+        Returns:
+            None
+        """
+        persisted_odfv = self.get_feature_view(on_demand_feature_view.feature_view_name)
+        entity_join_keys = [self.get_entity(entity_name).join_key for entity_name in persisted_odfv.entities]
+        for entity_join_key in entity_join_keys:
+            features_df[entity_join_key] = [row[entity_join_key] for row in input_entity_rows] 
+
+        # Determine neccessary columns to add                              
+        existing_feature_names = set(list(features_df.columns.values)) | set(entity_join_keys)
+        schema = {feature.name for feature in on_demand_feature_view.features}  
+
+        features_to_retrive = list(schema - existing_feature_names)
+
+        if len(features_to_retrive) > 0:
+            warnings.warn(
+                f"Incomplete on-demand feature view calculated, manually retrieving uncalculated features. "
+                f"Historical on-demand features retrieved: {features_to_retrive}"
+            )
+
+            features_to_fetch = [persisted_odfv.name + ":" + feature_name for feature_name in features_to_retrive]
+            entity_rows_to_fetch = [{entity_join_key: input_entity_row[entity_join_key] for entity_join_key in entity_join_keys} for input_entity_row in input_entity_rows]
+
+            returned_features = self.get_online_features(
+                features=features_to_fetch,
+                entity_rows=entity_rows_to_fetch,
+            ).to_df(include_event_timestamps=False)
+
+            features_df = pd.merge(features_df, returned_features, on=entity_join_keys)
+
+        features_df["event_timestamp"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
+        features_df["created"] = pd.to_datetime([datetime.now() for row in range(len(features_df.index))])
+        self.push(on_demand_feature_view.push_source_name, features_df, to=PushMode.ONLINE)
+        return
+    
+    def _parse_on_demand_features_requiring_update(self, fetched_features: pd.DataFrame, features_to_fetch: List[str]) -> List[Tuple[OnDemandFeatureView, pd.DataFrame]]:
+        """
+        Parse through the list of features to fetch and dataframe containing retrieved online features.
+        Returns a list of persisted OnDemandFeatureViews that require their historical features 
+        to be updated in the online store, and Dataframes containing the feature values to update them with.
+
+        Args:
+        self: The feature store instance from which features are retrieved from
+        fetched_features:  A Pandas Dataframe that contains the features retrieved post transformation to store in the online store
+        features_to_fetch: A list of the FeatureView:FeatureNames retrieved
+
+        Returns: A list of (OnDemandFeatureViews requiring update, values dataframe to update with)
+        """
+        features_df = fetched_features
+        (_, _, on_demand_feature_views) = self._get_feature_views_to_use(features_to_fetch)
+
+        to_update = []
+        for on_demand_feature_view in on_demand_feature_views:
+            if on_demand_feature_view.persist:
+                filtered_features = [feature.split(':')[1] for feature in features_to_fetch if feature.split(':')[0] == on_demand_feature_view.name]
+                to_update.append([on_demand_feature_view, features_df[filtered_features]])
+        return to_update
 
     @log_exceptions_and_usage
     def serve(
